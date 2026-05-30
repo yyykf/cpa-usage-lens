@@ -18,8 +18,8 @@ ON CONFLICT (id) DO UPDATE SET
   last_event_ts   = COALESCE(EXCLUDED.last_event_ts, collector_state.last_event_ts),
   last_request_id = COALESCE(NULLIF(EXCLUDED.last_request_id, ''), collector_state.last_request_id),
   events_ingested = collector_state.events_ingested + EXCLUDED.events_ingested,
-  last_error      = EXCLUDED.last_error,
-  last_error_at   = EXCLUDED.last_error_at,
+  last_error      = CASE WHEN EXCLUDED.last_error <> '' THEN EXCLUDED.last_error ELSE collector_state.last_error END,
+  last_error_at   = CASE WHEN EXCLUDED.last_error <> '' THEN EXCLUDED.last_error_at ELSE collector_state.last_error_at END,
   updated_at      = now()`,
 		s.LastPollAt, s.LastEventTS, s.LastRequestID, s.EventsIngested, s.LastError, s.LastErrorAt)
 	return err

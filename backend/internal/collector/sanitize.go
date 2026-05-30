@@ -27,7 +27,15 @@ func toEvent(raw rawQueueItem) (model.UsageEvent, bool) {
 		Alias:           raw.Alias,
 		Endpoint:        raw.Endpoint,
 		AuthType:        raw.AuthType,
-		Tokens:          model.Tokens(raw.Tokens), // 字段同序同类型，可直接转换
+		Tokens: model.Tokens{ // 显式逐字段赋值：未来任一 struct 改字段会编译报错，避免静默错位
+			Input:         raw.Tokens.Input,
+			Output:        raw.Tokens.Output,
+			Reasoning:     raw.Tokens.Reasoning,
+			Cached:        raw.Tokens.Cached,
+			CacheRead:     raw.Tokens.CacheRead,
+			CacheCreation: raw.Tokens.CacheCreation,
+			Total:         raw.Tokens.Total,
+		},
 		LatencyMs:       raw.LatencyMs,
 		TTFTMs:          raw.TTFTMs,
 		Failed:          raw.Failed,

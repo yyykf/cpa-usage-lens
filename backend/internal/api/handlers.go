@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -62,7 +63,8 @@ func (s *Server) queryRange(w http.ResponseWriter, r *http.Request) ([]model.Dai
 	}
 	rows, err := s.store.QueryDailyUsage(r.Context(), start, end)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		log.Printf("查询用量失败: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "查询失败"})
 		return nil, false
 	}
 	return rows, true
@@ -72,14 +74,16 @@ func (s *Server) handleCollector(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	hot, daily, err := s.store.Capacity(ctx)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		log.Printf("查询容量失败: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "查询失败"})
 		return
 	}
 	h := model.CollectorHealth{HotBytes: hot, DailyBytes: daily, Status: "stale"}
 
 	state, ok, err := s.store.GetCollectorState(ctx)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		log.Printf("查询采集器状态失败: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "查询失败"})
 		return
 	}
 	if ok {
@@ -104,7 +108,8 @@ func (s *Server) handleCollector(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRefreshPrices(w http.ResponseWriter, r *http.Request) {
 	if err := s.refresher.Refresh(r.Context()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		log.Printf("刷新价格表失败: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "刷新价格失败"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

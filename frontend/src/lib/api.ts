@@ -20,6 +20,8 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (res.status === 401) {
     clearToken()
+    // App 的 authed 仅初次读 localStorage，token 过期后需整页刷新才能回到登录页
+    if (typeof window !== 'undefined') window.location.reload()
     throw new Error('未授权，请重新登录')
   }
   if (!res.ok) {

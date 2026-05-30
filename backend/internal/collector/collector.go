@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -52,7 +53,10 @@ func (c *Collector) recoverPending(ctx context.Context) {
 	for _, h := range handles {
 		events, err := c.buffer.Load(h)
 		if err != nil {
-			log.Printf("采集器：加载缓冲 %s 失败: %v", h, err)
+			log.Printf("采集器：缓冲 %s 损坏，隔离为 .corrupt 待人工排查: %v", h, err)
+			if qerr := c.buffer.Quarantine(h); qerr != nil {
+				log.Printf("采集器：隔离损坏缓冲 %s 失败: %v", h, qerr)
+			}
 			continue
 		}
 		if _, err := c.store.InsertEvents(ctx, events); err != nil {
@@ -92,8 +96,8 @@ func (c *Collector) pollOnce(ctx context.Context) {
 		events = append(events, ev)
 		if ev.EventTS.After(lastTS) {
 			lastTS = ev.EventTS
+			lastID = ev.RequestID // 与 lastTS 保持同一条，诊断信息才一致
 		}
-		lastID = ev.RequestID
 	}
 	if len(events) == 0 {
 		_ = c.store.BumpCollectorState(ctx, st)
@@ -101,17 +105,22 @@ func (c *Collector) pollOnce(ctx context.Context) {
 	}
 
 	// 先落盘缓冲（防 pop 了但写库失败丢数据），写库确认后再删
-	handle, err := c.buffer.Save(events)
-	if err != nil {
-		log.Printf("采集器：落盘缓冲失败（继续尝试写库）: %v", err)
+	handle, saveErr := c.buffer.Save(events)
+	if saveErr != nil {
+		log.Printf("采集器：落盘缓冲失败（仍尝试写库，但已失去崩溃保护）: %v", saveErr)
 	}
 
 	inserted, err := c.store.InsertEvents(ctx, events)
 	if err != nil {
-		st.LastError = err.Error()
+		if saveErr != nil {
+			// 缓冲没存上 + 写库失败：这批已 pop 的数据有丢失风险（pop 不可回放），强告警
+			st.LastError = fmt.Sprintf("数据丢失风险：缓冲与写库均失败（%d 条）：buffer=%v；insert=%v", len(events), saveErr, err)
+		} else {
+			st.LastError = err.Error()
+		}
 		st.LastErrorAt = &now
 		_ = c.store.BumpCollectorState(ctx, st)
-		return // 不 commit：缓冲保留，下次 recover 重试
+		return // Save 成功则缓冲保留、下次 recover 重试
 	}
 	if handle != "" {
 		_ = c.buffer.Commit(handle)

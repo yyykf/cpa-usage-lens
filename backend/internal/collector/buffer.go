@@ -27,7 +27,9 @@ func NewBuffer(dir string) (*Buffer, error) {
 	return &Buffer{dir: dir}, nil
 }
 
-// Save 把一批 events 落盘，返回批次句柄（文件名）；空批次返回空句柄。
+// Save 把一批 events 原子落盘，返回批次句柄（文件名）；空批次返回空句柄。
+// 原子写：先写 .tmp + fsync，再 rename（同目录 rename 原子）——避免崩溃留下半截文件、
+// 让 recoverPending 读到坏 JSON。
 func (b *Buffer) Save(events []model.UsageEvent) (string, error) {
 	if len(events) == 0 {
 		return "", nil
@@ -37,7 +39,29 @@ func (b *Buffer) Save(events []model.UsageEvent) (string, error) {
 		return "", err
 	}
 	name := fmt.Sprintf("batch_%d_%d.json", time.Now().UnixNano(), atomic.AddUint64(&b.seq, 1))
-	if err := os.WriteFile(filepath.Join(b.dir, name), data, 0o600); err != nil {
+	final := filepath.Join(b.dir, name)
+	tmp := final + ".tmp"
+
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		_ = os.Remove(tmp)
 		return "", err
 	}
 	return name, nil
@@ -49,6 +73,12 @@ func (b *Buffer) Commit(handle string) error {
 		return nil
 	}
 	return os.Remove(filepath.Join(b.dir, handle))
+}
+
+// Quarantine 把损坏（无法解析）的批次文件改名为 .corrupt，避免反复加载失败，保留供人工排查。
+func (b *Buffer) Quarantine(handle string) error {
+	src := filepath.Join(b.dir, handle)
+	return os.Rename(src, src+".corrupt")
 }
 
 // Pending 列出未提交的批次句柄（启动恢复用）。
