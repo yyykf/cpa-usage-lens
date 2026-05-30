@@ -15,7 +15,7 @@
 ### 来自调研（已查实）
 - **数据源**：`GET /v0/management/usage-queue`（需 management key），返回每条请求的用量 JSON；也可用同端口的 Redis RESP 队列消费。
 - **pop 语义**：取出即删除 → 采集器必须常驻且勤快消费；同一队列**不能多采集器并行**（会互吃数据）。
-- **队列真实字段**：`timestamp, latency_ms, source(账号邮箱), auth_index, tokens{input/output/reasoning/cached/total}, failed(布尔), provider, model, alias, endpoint, auth_type, api_key(⚠️敏感), request_id`。
+- **队列真实字段（v7.1.31 实测）**：`timestamp(带本地时区偏移), latency_ms, ttft_ms, source(账号邮箱), auth_index, tokens{input/output/reasoning/cached/cache_read/cache_creation/total}, failed, fail{status_code, body}, response_headers(⚠️大+含Set-Cookie等敏感,须剥离), provider, model, alias, endpoint, auth_type, api_key(⚠️敏感,须剥离), request_id, reasoning_effort, service_tier`。
 - **成本不由 CPA 给**：需自己用价格表（LiteLLM `model_prices_and_context_window.json`）按 token 估算。ccusage / CPA-Manager 均如此。
 - **已有同类项目**（多为本地 SQLite）：zhanglunet/cliproxyapi-usage-dashboard、Willxup/cpa-usage-keeper、CPA-Manager 等。
 
@@ -23,7 +23,7 @@
 - ✅ **usage-queue 在 CPA「2026-06 移除内置统计」后仍保留**（已查实：删的是内存聚合统计 `internal/usage/`，队列完好且持续加功能至 v7.1.32；官方反而主推"队列+外部持久化"路线）。
 - 单 CPA 实例、单采集器（第一版）。
 - 目标量级约 1000 请求/天，7 天明细 + 紧凑聚合可舒适待在 Supabase Free 500MB 内。
-- 待人工确认：在实际目标 CPA 版本抓一次真实 `/usage-queue?count=1` 样本核对完整字段。
+- ✅ 已在 v7.1.31 实例抓真实样本核对字段：发现缓存 token 实际拆分（cache_read/cache_creation）、`fail.status_code` 真实存在、并多出 `response_headers`（大+敏感，须剥离）等，详见 Technical Notes。
 
 ## Open Questions（已全部收敛 ✅）
 - ✅ 整体架构形态 → 见 Decision D1
@@ -36,7 +36,7 @@
 ## Requirements（evolving）
 - 通过 HTTP `GET /v0/management/usage-queue?count=N` 轮询消费单个 CPA 实例的用量事件（穿透反代、适合小服务器），写精简明细到 Supabase
 - **防丢数据**：采集器对"已 pop 但尚未确认写入 Supabase"的数据先本地落盘缓冲，确认写入成功后再丢弃（云版独有风险：pop 不可回放）
-- 写库前剥离 `api_key` 等敏感字段
+- 写库前剥离敏感/大字段：`api_key`、`response_headers`（含 Set-Cookie 等）、`fail.body`（spec 非目标 + 隐私 + 容量）
 - 用 `request_id` 去重（幂等插入，参考 zhanglunet 的 UNIQUE 约束做法）
 - 明细保留可配置短窗口（默认 7 天）；按账号+模型聚合每日用量并长期保留
 - 删明细不丢聚合（幂等 rollup，可重算最近几天处理延迟事件）
@@ -102,7 +102,10 @@
 - （第二批，非 MVP）页面⑥按模型分布、⑦近期请求明细（排障）
 
 ## Technical Notes
-- spec 字段需按真实队列修正：`status_code` 降级为 `failed` 布尔；`cache_read/creation` 合并为单个 `cached_tokens`；`cost_usd` **不入库，改为查询时按最新价格表实时计算**（规避价格更新后回填历史；聚合表须保留 model 维度以便按模型单价算成本）。
+- 字段已按 v7.1.31 真实样本核对（修正早期假设）：`fail.status_code` **真实存在**（HTTP 状态码，可存）；`cache_read_tokens`/`cache_creation_tokens` **真实拆分**（成本可按读/写不同单价精确算，无需近似）；`cost_usd` **不入库，查询时按最新价格表实时计算**（聚合表保留 model 维度按模型单价算）。
+- ⚠️ 队列含 `response_headers`（完整响应头，体积大且含 `Set-Cookie` 等敏感信息）与 `api_key`、`fail.body`：采集器**必须剥离，绝不入库**。
+- `timestamp` 带本地时区偏移（如 `+08:00`），非 UTC；时区换算据此（聚合"天"按可配时区）。
+- v7.1.31 额外字段：`ttft_ms`（首字节延迟，可选存为性能指标）、`reasoning_effort`、`service_tier`。
 - 项目编码规范：`.trellis/spec/{frontend,backend}/`。
 - **采集硬约束（必须遵守）**：① 同一 CPA 队列全局只能跑一个采集器；② 绝不开 `SUBSCRIBE usage`（会让 FIFO 端点取不到数据）；③ 采集器停机超过 `redis-usage-queue-retention-seconds`（默认 60s，最大 3600s）期间的数据**永久丢失**（pop 不可回放）——文档需明确告知，并尽量保证采集器高可用/自动重启。
 - 采集方式优先 HTTP `GET /usage-queue?count=N`（穿透反代），而非 RESP 裸 TCP。CPA 版本下限 v6.10.8+，目标 v7.1.x。
