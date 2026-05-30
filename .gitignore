@@ -26,3 +26,8 @@ local-preview/
 .playwright-cli/
 /dashboard.yaml
 /dashboard-e2e.png
+
+# 前端 TS 构建产物（tsc -b 增量缓存 + 编译出的 vite 配置）
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
