@@ -1,0 +1,23 @@
+# OS / Editor
+.DS_Store
+*.swp
+
+# Local / private config
+.claude/settings.local.json
+.env
+.env.*
+!.env.example
+
+# Per-developer Trellis workspace (journals, session traces)
+.trellis/workspace/
+
+# Dependencies / build output (Go backend + React frontend)
+node_modules/
+dist/
+build/
+*.log
+backend/bin/
+*.out
+
+# Removed local preview sandbox (kept ignored to avoid accidental re-add)
+local-preview/
