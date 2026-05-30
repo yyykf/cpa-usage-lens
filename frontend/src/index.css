@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0e1a;
+  --foreground: #e6e9f0;
+  --card: #111627;
+  --muted: #1a2036;
+  --muted-foreground: #8b93a7;
+  --border: #232a40;
+  --primary: #3b82f6;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Fira Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 数字统一用 Fira Code（等宽，纵向对齐、技术感） */
+.font-num {
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

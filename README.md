@@ -1,15 +1,56 @@
 # CPA Usage Lens
 
-Early workspace for designing a lightweight CLIProxyAPI usage collector and analytics layer.
+为运行 CLIProxyAPI (CPA) 的小服务器用户，提供**不占用本地资源**的账号级用量分析：用外部采集器消费 CPA 用量队列，把精简数据写入 **Supabase 云数据库**，并提供一个**美观的暗色 Web 仪表盘**，随时查看每个账号在一段周期内的请求数、token 用量与估算成本。
 
-The initial storage direction is Supabase, but the project name intentionally stays storage-agnostic. The core design is to keep only short-lived request-level details, persist long-term daily aggregates, and avoid storing large raw request/response payloads.
+> 差异化：数据上 Supabase 云、本地近乎零负担（现有同类项目多用本地 SQLite）。
 
-## Local Preview
+## 特性
 
-`local-preview/` contains an isolated Docker Compose stack for comparing existing CPA usage dashboards without touching a real CPA instance.
+- 📊 暗色 Bento 仪表盘：周期总览 / 各账号用量榜 / 每日趋势 / 采集器健康
+- ☁️ 数据在 Supabase 云，本地只跑两个轻量容器（backend + frontend）
+- 💰 LiteLLM 价格表，**query-time 成本估算**（只存用过的模型，缺价标"未知"，改价自动生效）
+- 🔒 单用户密码登录（bcrypt + JWT），所有数据 API 鉴权
+- 🛡️ **防丢数据**：落盘缓冲（已 pop 未写库先落盘，确认写入后才删，重启自动恢复）
+- ♻️ **容量有界**：热明细短期保留（默认 7 天，可配）+ 日聚合长期；先聚合后清理，绝不误删
+- 🔑 写库前剥离敏感字段（`api_key` / `response_headers` / `fail.body` 绝不入库）
 
-```bash
-cd local-preview
-docker compose up -d
-docker compose down
+## 架构
+
 ```
+CPA  GET /usage-queue  --轮询 pop-->  采集器（剥敏感 / request_id 去重 / 落盘缓冲）
+                                         │
+                                         ▼
+        request_events_hot（热明细，留 N 天）--每 rollup--> daily_account_usage（账号+模型+天，长期）
+                                                                      │
+   backend(Go 单进程) = 采集循环 + rollup/清理 + 价格刷新 + HTTP API + 鉴权
+   frontend(React)  = nginx 静态托管 + 反代 /api
+   数据库 = Supabase 云（不进 compose）
+```
+
+## 快速开始
+
+详见 **[docs/deployment.md](docs/deployment.md)**。三步：
+
+1. Supabase 建表（`supabase db push` 或 SQL Editor 跑 `supabase/migrations/`）
+2. 复制 `.env.example` 为 `.env` 并填写（CPA 地址/key、Supabase 连接串、登录密码）
+3. `docker compose up -d --build` → 浏览器访问 `http://<服务器>:8088`
+
+## 技术栈
+
+- **Backend**：Go（`pgx` 直连 Supabase Postgres、标准库 `net/http`、`bcrypt`、`golang-jwt`）
+- **Frontend**：React 18 + Vite + TypeScript + Tailwind CSS + Recharts + lucide-react
+- **数据库**：Supabase（Postgres）
+- **部署**：Docker Compose（backend + frontend 两容器）
+
+## 项目结构
+
+```
+backend/    Go 后端：cmd/server + internal/{config,db,model,collector,rollup,pricing,api,timeutil}
+frontend/   React 前端：src/{components,pages,lib}
+supabase/   migrations（建表 SQL）
+docs/       部署与运维文档
+```
+
+## ⚠️ 重要约束
+
+同一 CPA 队列**只能跑一个**采集器（pop 即删、多实例互抢）；采集器停机超过 CPA 的 `redis-usage-queue-retention-seconds` 期间的数据**永久丢失**（pop 不可回放）。CPA 侧需 `usage-statistics-enabled: true`。详见 [部署文档](docs/deployment.md)。
