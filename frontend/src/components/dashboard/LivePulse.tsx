@@ -26,7 +26,7 @@ export function PulseDot({
 // 顶栏"采集中"呼吸徽标。
 export function LiveBadge({ label = '采集中' }: { label?: string }) {
   return (
-    <span className="ml-1.5 inline-flex items-center gap-1.5 rounded-full border border-data-success/25 bg-data-success/[0.08] px-2.5 py-1 font-mono text-[11px] tracking-wider text-data-success">
+    <span className="ml-1.5 inline-flex items-center gap-1.5 rounded-full border border-data-success/25 bg-data-success/8 px-2.5 py-1 font-mono text-[11px] tracking-wider text-data-success">
       <PulseDot tone="success" />
       {label}
     </span>

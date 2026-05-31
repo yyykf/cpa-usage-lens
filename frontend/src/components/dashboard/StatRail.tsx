@@ -71,7 +71,7 @@ function Stat({
   loading: boolean
 }) {
   return (
-    <div className="relative px-5 py-5 [&:not(:first-child)]:before:absolute [&:not(:first-child)]:before:inset-y-[18px] [&:not(:first-child)]:before:left-0 [&:not(:first-child)]:before:w-px [&:not(:first-child)]:before:bg-border-soft">
+    <div className="relative px-5 py-5 not-first:before:absolute not-first:before:inset-y-[18px] not-first:before:left-0 not-first:before:w-px not-first:before:bg-border-soft">
       <div className="flex items-center gap-2 font-mono text-[11.5px] uppercase tracking-[0.16em] text-muted-foreground">
         <span aria-hidden className="size-1.5 rounded-sm" style={{ background: dotColor }} />
         {label}

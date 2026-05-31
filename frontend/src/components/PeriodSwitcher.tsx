@@ -106,7 +106,7 @@ export default function PeriodSwitcher({
                 value={from}
                 max={to || undefined}
                 onChange={(e) => setFrom(e.target.value)}
-                className="rounded-md border border-border bg-[hsl(var(--bg-1))] px-2.5 py-2 font-mono text-[13px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20 [color-scheme:dark]"
+                className="rounded-md border border-border bg-[hsl(var(--bg-1))] px-2.5 py-2 font-mono text-[13px] text-foreground outline-hidden focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20 scheme-dark"
               />
             </div>
             <div className="mb-3 flex flex-col gap-1.5">
@@ -119,7 +119,7 @@ export default function PeriodSwitcher({
                 value={to}
                 min={from || undefined}
                 onChange={(e) => setTo(e.target.value)}
-                className="rounded-md border border-border bg-[hsl(var(--bg-1))] px-2.5 py-2 font-mono text-[13px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20 [color-scheme:dark]"
+                className="rounded-md border border-border bg-[hsl(var(--bg-1))] px-2.5 py-2 font-mono text-[13px] text-foreground outline-hidden focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20 scheme-dark"
               />
             </div>
             <Button type="button" className="w-full" onClick={applyCustom} disabled={!from || !to}>

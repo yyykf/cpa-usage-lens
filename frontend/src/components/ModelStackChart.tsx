@@ -40,7 +40,7 @@ export default function ModelStackChart({ data, loading }: { data: ModelBreakdow
         title={
           <span className="flex items-center gap-2">
             每日模型用量
-            <span className="font-mono text-[11px] tracking-[0.1em] text-faint">100% · BY TOKEN</span>
+            <span className="font-mono text-[11px] tracking-widest text-faint">100% · BY TOKEN</span>
           </span>
         }
         barColor={CHART_COLORS.tokens}

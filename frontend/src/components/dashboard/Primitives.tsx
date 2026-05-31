@@ -27,11 +27,11 @@ export function Panel({
     <div
       className={cn(
         'relative overflow-hidden rounded-lg border border-border',
-        'bg-gradient-to-b from-card to-[hsl(var(--bg-1))]',
+        'bg-linear-to-b from-card to-[hsl(var(--bg-1))]',
         'shadow-[inset_0_1px_0_hsl(var(--foreground)/0.025),0_18px_40px_-28px_hsl(0_0%_0%/0.9)]',
         // 顶部高光线
         'before:absolute before:inset-x-0 before:top-0 before:h-px',
-        'before:bg-gradient-to-r before:from-transparent before:via-foreground/[0.07] before:to-transparent',
+        'before:bg-linear-to-r before:from-transparent before:via-foreground/[0.07] before:to-transparent',
         className,
       )}
     >
