@@ -51,6 +51,8 @@ Full guide: **[docs/deployment.md](docs/deployment.md)**. In three steps:
 2. **Copy `.env.example` to `.env`** and fill it in (CPA URL/key, Supabase connection string, dashboard password)
 3. **`docker compose up -d --build`** → open `http://<server>:8088`
 
+> 💡 Don't want to build locally? Run the pre-built GHCR images instead — `CUL_VERSION=v0.1.0 docker compose -f docker-compose.prod.yml up -d`. See [deployment](docs/deployment.md).
+
 > ⚠️ CPA must have `usage-statistics-enabled: true`, and **only one** collector may run against a given CPA queue. See [Important constraints](#important-constraints).
 
 ## Tech Stack

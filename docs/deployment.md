@@ -60,11 +60,28 @@ Copy `.env.example` to `.env` and fill in:
 
 ---
 
-## 4. One-command deploy
+## 4. Deploy
+
+Two ways — pick one.
+
+### Option A — Pre-built images (recommended, no build)
+
+Pull the published images from GHCR and run them directly. The server only needs `.env` and `docker-compose.prod.yml` (no source checkout):
+
+```bash
+# CUL_VERSION selects the release tag; omit it to use :latest
+CUL_VERSION=v0.1.0 docker compose -f docker-compose.prod.yml up -d
+```
+
+Images are published to GHCR automatically on every `v*` release tag (see [the Release workflow](../.github/workflows/release.yml)).
+
+### Option B — Build from source
 
 ```bash
 docker compose up -d --build
 ```
+
+Either way:
 
 - Frontend: open `http://<server-ip>:8088`
 - Backend: `:8080` (optional, debug only; you can drop the port mapping in production and let the frontend nginx reach it over the internal network)
@@ -182,11 +199,26 @@ supabase db push --db-url "<Session pooler 连接串>"
 
 ---
 
-## 四、一键部署
+## 四、部署（两种方式，二选一）
+
+### 方式 A —— 用预构建镜像（推荐，免构建）
+
+从 GHCR 拉取已发布的镜像直接运行。服务器上只需要 `.env` 和 `docker-compose.prod.yml`（无需 clone 源码）：
+
+```bash
+# CUL_VERSION 指定发布版本号；省略则用 :latest
+CUL_VERSION=v0.1.0 docker compose -f docker-compose.prod.yml up -d
+```
+
+镜像在每次 `v*` 发布 tag 时自动推送到 GHCR（见 [Release workflow](../.github/workflows/release.yml)）。
+
+### 方式 B —— 从源码构建
 
 ```bash
 docker compose up -d --build
 ```
+
+两种方式部署后：
 
 - 前端：浏览器访问 `http://<服务器IP>:8088`
 - 后端：`:8080`（可选，仅调试用；生产可在 compose 去掉端口映射，仅由 frontend nginx 内网访问）
