@@ -16,8 +16,21 @@ func Cost(t model.Tokens, p model.ModelPrice) (float64, bool) {
 	}
 
 	var c float64
+
+	// OpenAI 风格：input_tokens 已【包含】命中缓存的 cached_tokens，缓存部分应按 cache_read 折扣价，
+	// 不能整段按 input 全价收（缓存命中越多越高估）。Claude 风格用独立的 cache_read/cache_creation 字段、
+	// cached 恒为 0，走原逻辑。这里用 "Cached>0 且 CacheRead==0" 按数据形态自动区分两种来源；
+	// 未来若各 provider 计费差异变大，可在此处演进为按 provider 的策略模式。
+	billableInput := t.Input
+	if t.Cached > 0 && t.CacheRead == 0 {
+		billableInput = t.Input - t.Cached
+		if billableInput < 0 {
+			billableInput = 0 // 防御：cached 不应超过 input，异常数据兜底
+		}
+		c += cacheCost(t.Cached, p.CacheReadCostPerToken, ip) // cached 优先 cache_read 专价，缺则回退 input 价
+	}
 	if ip != nil {
-		c += float64(t.Input) * *ip
+		c += float64(billableInput) * *ip
 	}
 	if op != nil {
 		c += float64(t.Output) * *op
