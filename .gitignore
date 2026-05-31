@@ -1,6 +1,7 @@
 # OS / Editor
 .DS_Store
 *.swp
+.idea/
 
 # Local / private config
 .claude/settings.local.json

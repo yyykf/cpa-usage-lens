@@ -98,6 +98,12 @@ func (s *Server) handleCollector(w http.ResponseWriter, r *http.Request) {
 		case state.LastPollAt != nil && now.Sub(*state.LastPollAt) < time.Minute:
 			h.Status = "running"
 		}
+		// 已恢复的旧错误（Status 已回到 running/stale）不再下发，
+		// 避免前端把几小时前的瞬时错误当成"当前故障"常驻显示为红字；
+		// collector_state.last_error 仍保留在库里，运维可直接查表追溯。
+		if h.Status != "error" {
+			h.LastError = ""
+		}
 		if state.LastEventTS != nil {
 			lag := int64(now.Sub(*state.LastEventTS).Seconds())
 			h.LagSeconds = &lag

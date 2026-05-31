@@ -15,6 +15,15 @@ function formatBytes(n: number): string {
   return `${mb % 1 === 0 ? mb : mb.toFixed(1)} MB`
 }
 
+// 把"距上次数据"的秒数格式化为人类可读：<60s 显示秒，<1h 显示分，否则 时+分
+function formatLag(sec: number): string {
+  if (sec < 60) return `${sec}s 前`
+  if (sec < 3600) return `${Math.floor(sec / 60)}m 前`
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return m > 0 ? `${h}h ${m}m 前` : `${h}h 前`
+}
+
 const STATUS_CONFIG: Record<
   CollectorHealth['status'],
   { dot: string; label: string }
@@ -30,7 +39,7 @@ export default function CollectorHealth({
 }: CollectorHealthProps) {
   const status = STATUS_CONFIG[health.status]
   const lag: string =
-    health.lagSeconds === null ? '—' : `${health.lagSeconds}s 前`
+    health.lagSeconds === null ? '—' : formatLag(health.lagSeconds)
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 md:p-6 hover:border-primary/40 transition-colors">
