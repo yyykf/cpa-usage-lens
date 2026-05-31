@@ -1,0 +1,28 @@
+# CPA Usage Lens — production compose using pre-built images from GHCR (no local build).
+#
+#   1. cp .env.example .env          # then fill in your values
+#   2. CUL_VERSION=v0.1.0 docker compose -f docker-compose.prod.yml up -d
+#      (CUL_VERSION selects the image tag; defaults to "latest" if unset)
+#
+# Images are published by .github/workflows/release.yml on every v* tag.
+# Service names must stay "backend"/"frontend" — the frontend nginx proxies /api to "backend".
+services:
+  backend:
+    image: ghcr.io/yyykf/cpa-usage-lens-backend:${CUL_VERSION:-latest}
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - backend-buffer:/data/buffer # disk buffer persistence (survives collector restart)
+    ports:
+      - "8080:8080" # optional, debug only; can be removed in production
+
+  frontend:
+    image: ghcr.io/yyykf/cpa-usage-lens-frontend:${CUL_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8088:80" # browse http://<server-ip>:8088
+
+volumes:
+  backend-buffer:
