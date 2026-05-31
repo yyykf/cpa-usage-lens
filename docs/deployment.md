@@ -75,7 +75,24 @@ docker compose up -d --build
 
 ---
 
-## 六、容量假设
+## 六、只读实例 / 迭代验证（`COLLECTOR_ENABLED`）
+
+backend 是单进程，默认同时跑：后台采集循环 + rollup/清理调度 + 价格刷新 + 查询 API。但 CPA 队列是 **pop 即删** 且**全局只能跑一个采集器**（见上节约束 1）——所以**不能**简单地再起第二个实例来做验证（会抢队列、还会触发 rollup/清理写库）。
+
+为此提供开关 `COLLECTOR_ENABLED`（`.env`，默认 `true`）：
+
+| 值 | 行为 |
+|------|------|
+| `true`（默认） | 正常实例：采集 + rollup/清理 + 价格刷新 + 查询 API（现有行为，零变化） |
+| `false` | **只读实例**：仅价格刷新 + 查询 API。**不消费 CPA 队列、不写库、不 rollup/清理**——因此不抢正在运行的采集器的数据 |
+
+用途：迭代/调试时（如验证前端或新查询 API），在另一台机器或本地起一个 `COLLECTOR_ENABLED=false` 的实例，连同一个 Supabase 只读地查数据，**不会与生产采集器争抢同一个 CPA 队列**。生产采集实例始终保持唯一且 `COLLECTOR_ENABLED=true`。
+
+> 注意：`COLLECTOR_ENABLED=false` 只是不再消费队列，并**不改变**「同一 CPA 队列全局单采集器」这条硬约束——它正是为了让你在不违反该约束的前提下做验证。价格表 upsert 是幂等的，只读实例照样能算成本。
+
+---
+
+## 七、容量假设
 
 - **明细有界**：体积 ≈ 保留天数 × 日请求量（默认 7 天），**有上限、不随时间无限增长**。
 - **聚合极小**：`daily_account_usage` 每行很小，按 账号×模型×天 增长，缓慢。
@@ -84,7 +101,7 @@ docker compose up -d --build
 
 ---
 
-## 七、成本估算
+## 八、成本估算
 
 - 用 **LiteLLM 价格表**（`BerriAI/litellm` 的 `model_prices_and_context_window.json`）。
 - **query-time 计算**：成本 = token × 当前单价，不在库里存死 cost；改了价格历史数据自动按新价显示，无需回填。
@@ -93,7 +110,7 @@ docker compose up -d --build
 
 ---
 
-## 八、停机与回滚
+## 九、停机与回滚
 
 - 采集器中断重启：自动恢复落盘缓冲；但停机超 retention 的数据无法补回（见风险 2）。
 - 队列堆积：正常负载下 `count=200` + 3s 轮询足以追上；积压严重时可临时调大 `COLLECTOR_BATCH_SIZE`。

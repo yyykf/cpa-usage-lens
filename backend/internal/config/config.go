@@ -21,6 +21,7 @@ type Config struct {
 	HotRetentionDays  int
 	Timezone          *time.Location
 	BackendPort       string
+	CollectorEnabled  bool
 }
 
 // Load 读取环境变量，校验必填项并解析类型；任一必填缺失或解析失败即返回错误。
@@ -79,6 +80,10 @@ func Load() (*Config, error) {
 	}
 	cfg.Timezone = loc
 
+	// 默认 true：现有 .env 没有该变量也照常采集，零破坏。
+	// false 时起一个「只提供查询 API、不采集、不写库」的只读实例（迭代/调试用）。
+	cfg.CollectorEnabled = getenvBool("COLLECTOR_ENABLED", true)
+
 	return cfg, nil
 }
 
@@ -99,4 +104,18 @@ func getenvInt(key string, def int) (int, error) {
 		return 0, fmt.Errorf("环境变量 %s 必须是整数，得到 %q", key, v)
 	}
 	return n, nil
+}
+
+// getenvBool 读取布尔型开关：空字符串返回 def；否则用 strconv.ParseBool 容错，
+// 解析失败也返回 def（开关类配置不因笔误而阻断启动）。
+func getenvBool(key string, def bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def
+	}
+	return b
 }

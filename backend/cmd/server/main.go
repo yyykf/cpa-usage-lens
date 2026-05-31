@@ -44,18 +44,24 @@ func main() {
 	}
 	go priceSvc.RunDaily(ctx)
 
-	// 采集器：轮询 CPA usage-queue
-	buf, err := collector.NewBuffer(getenv("BUFFER_DIR", "./data/buffer"))
-	if err != nil {
-		log.Fatalf("初始化缓冲目录失败: %v", err)
-	}
-	cpaClient := collector.NewCPAClient(cfg.CPABaseURL, cfg.CPAManagementKey, &http.Client{Timeout: 20 * time.Second})
-	coll := collector.NewCollector(cpaClient, database, buf, cfg.BatchSize, cfg.PollInterval)
-	go coll.Run(ctx)
+	// 采集器 + rollup/清理：受 COLLECTOR_ENABLED 控制（默认 true）。
+	// 关闭后本实例纯只读——不消费 CPA 队列（不抢「全局单采集器」）、不写库、不 rollup/清理。
+	if cfg.CollectorEnabled {
+		// 采集器：轮询 CPA usage-queue
+		buf, err := collector.NewBuffer(getenv("BUFFER_DIR", "./data/buffer"))
+		if err != nil {
+			log.Fatalf("初始化缓冲目录失败: %v", err)
+		}
+		cpaClient := collector.NewCPAClient(cfg.CPABaseURL, cfg.CPAManagementKey, &http.Client{Timeout: 20 * time.Second})
+		coll := collector.NewCollector(cpaClient, database, buf, cfg.BatchSize, cfg.PollInterval)
+		go coll.Run(ctx)
 
-	// rollup 调度：每小时聚合 + 清理
-	sched := rollup.NewScheduler(database, cfg.Timezone, cfg.HotRetentionDays, cfg.RollupInterval)
-	go sched.Run(ctx)
+		// rollup 调度：定时聚合 + 清理
+		sched := rollup.NewScheduler(database, cfg.Timezone, cfg.HotRetentionDays, cfg.RollupInterval)
+		go sched.Run(ctx)
+	} else {
+		log.Println("COLLECTOR_ENABLED=false：仅提供查询 API（不采集、不 rollup/清理）")
+	}
 
 	// API + 鉴权
 	auth, err := api.NewAuthenticator(cfg.DashboardPassword, cfg.AuthTokenSecret)
