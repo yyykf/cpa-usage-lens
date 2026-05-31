@@ -1,4 +1,12 @@
-import type { Overview, AccountUsage, TrendPoint, CollectorHealth, Period, CustomRange } from '../types'
+import type {
+  Overview,
+  AccountUsage,
+  TrendPoint,
+  CollectorHealth,
+  ModelBreakdown,
+  Period,
+  CustomRange,
+} from '../types'
 
 const BASE = import.meta.env.VITE_API_BASE ?? ''
 const TOKEN_KEY = 'cpalens_token'
@@ -31,10 +39,14 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-// 把周期 + 自定义范围转成查询串
+// 把周期 + 自定义范围转成查询串。
+// custom 周期必须带 from/to，否则后端报"无效周期参数"——缺失时回退到 7d 兜底。
 export function periodQuery(period: Period, custom?: CustomRange): string {
-  if (period === 'custom' && custom) {
-    return `period=custom&from=${custom.from}&to=${custom.to}`
+  if (period === 'custom') {
+    if (custom?.from && custom?.to) {
+      return `period=custom&from=${encodeURIComponent(custom.from)}&to=${encodeURIComponent(custom.to)}`
+    }
+    return 'period=7d'
   }
   return `period=${period}`
 }
@@ -50,5 +62,6 @@ export async function login(password: string): Promise<void> {
 export const getOverview = (q: string) => req<Overview>(`/api/overview?${q}`)
 export const getAccounts = (q: string) => req<AccountUsage[]>(`/api/accounts?${q}`)
 export const getTrend = (q: string) => req<TrendPoint[]>(`/api/trend?${q}`)
+export const getModels = (q: string) => req<ModelBreakdown>(`/api/models?${q}`)
 export const getCollector = () => req<CollectorHealth>('/api/collector')
 export const refreshPrices = () => req<{ status: string }>('/api/prices/refresh', { method: 'POST' })

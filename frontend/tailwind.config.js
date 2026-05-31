@@ -1,37 +1,95 @@
+import tailwindcssAnimate from 'tailwindcss-animate'
+
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: ['class'],
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        background: '#0A0E1A',
-        foreground: '#E6E9F0',
-        card: '#111627',
-        popover: '#111627',
-        muted: '#1A2036',
-        'muted-foreground': '#8B93A7',
-        border: '#232A40',
-        input: '#232A40',
-        primary: '#3B82F6',
-        'primary-foreground': '#FFFFFF',
-        accent: '#1E2540',
-        ring: '#3B82F6',
-        destructive: '#EF4444',
+        // shadcn 语义 token（全部走 CSS 变量，支持 /alpha 修饰；亮色接口预留）
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
+        border: 'hsl(var(--border))',
+        'border-soft': 'hsl(var(--border-soft))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        faint: 'hsl(var(--faint))',
         // 数据语义色（全站一致）
-        'data-requests': '#3B82F6',
-        'data-tokens': '#22D3EE',
-        'data-cost': '#F97316',
-        'data-failed': '#EF4444',
-        'data-success': '#10B981',
+        'data-requests': 'hsl(var(--data-requests))',
+        'data-tokens': 'hsl(var(--data-tokens))',
+        'data-cost': 'hsl(var(--data-cost))',
+        'data-failed': 'hsl(var(--data-failed))',
+        'data-success': 'hsl(var(--data-success))',
+        // 模型分布色阶
+        'model-1': 'hsl(var(--m1))',
+        'model-2': 'hsl(var(--m2))',
+        'model-3': 'hsl(var(--m3))',
+        'model-4': 'hsl(var(--m4))',
+      },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
       },
       fontFamily: {
         sans: ['"Fira Sans"', 'system-ui', 'sans-serif'],
         mono: ['"Fira Code"', 'ui-monospace', 'monospace'],
       },
-      borderRadius: {
-        '2xl': '0.875rem',
+      keyframes: {
+        'accordion-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+        'caret-blink': {
+          '0%,70%,100%': { opacity: '1' },
+          '20%,50%': { opacity: '0' },
+        },
+        pulse: {
+          '0%': { boxShadow: '0 0 0 0 hsl(var(--data-success) / 0.45)' },
+          '70%': { boxShadow: '0 0 0 7px hsl(var(--data-success) / 0)' },
+          '100%': { boxShadow: '0 0 0 0 hsl(var(--data-success) / 0)' },
+        },
+      },
+      animation: {
+        'accordion-down': 'accordion-down 0.2s ease-out',
+        'accordion-up': 'accordion-up 0.2s ease-out',
+        'caret-blink': 'caret-blink 1.25s ease-out infinite',
+        'pulse-ring': 'pulse 2.4s ease-out infinite',
       },
     },
   },
-  plugins: [],
+  plugins: [tailwindcssAnimate],
 }

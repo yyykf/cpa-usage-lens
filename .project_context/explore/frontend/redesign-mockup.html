@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CPA Usage Lens — Redesign Mockup (Carbon · Muted)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    /* Carbon · Muted：纯黑碳基 + 哑光强调（不刺眼） */
+    --bg-0:#060608;
+    --bg-1:#0A0A0C;
+    --panel:#101013;
+    --panel-2:#17171C;
+    --line:#242429;
+    --line-soft:#1A1A1E;
+    --text:#ECEDEF;          /* 近白（不刺白） */
+    --dim:#8E8E98;
+    --faint:#54545E;
+    --hi:#F4F4F5;            /* UI 强调=白 */
+    --accent:#5AA0A8;        /* 哑光青（细节刻度/focus/hairline） */
+    /* 数据色：全部哑光（降饱和降明度，黑底沉稳不发光） */
+    --c-req:#A8ABB5;         /* 请求-银灰 */
+    --c-tok:#56A0AB;         /* token-哑光青 */
+    --c-cost:#C99A52;        /* 成本-古铜 */
+    --c-fail:#D55F6E;        /* 失败-哑光红 */
+    --c-ok:#4FA587;          /* 健康-哑光绿 */
+    /* 模型色阶：哑光青→灰绿，明度梯度拉开（配合段间深间隙保证分界清晰） */
+    --m1:#4FA8B8; --m2:#52A88E; --m3:#6FB87C; --m4:#9DC58D;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Fira Sans",system-ui,sans-serif;
+    color:var(--text);
+    background:var(--bg-0);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.5;
+    /* 仪器台氛围：极淡点阵 + 顶部冷白微光（哑光、克制） */
+    background-image:
+      radial-gradient(1100px 460px at 80% -10%, rgba(255,255,255,.045), transparent 60%),
+      radial-gradient(820px 400px at 6% -8%, rgba(90,160,168,.045), transparent 58%),
+      radial-gradient(rgba(255,255,255,.018) 1px, transparent 1px);
+    background-size:auto,auto,22px 22px;
+    background-attachment:fixed;
+  }
+  .mono{font-family:"Fira Code",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1320px;margin:0 auto;padding:0 28px 64px}
+
+  header{display:flex;align-items:center;justify-content:space-between;padding:22px 0 18px;position:relative}
+  .brand{display:flex;align-items:center;gap:14px}
+  .logo{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(150deg,#16181b,#0b0b0e);border:1px solid #2b2b31;box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 0 20px rgba(90,160,168,.14)}
+  .logo svg{display:block}
+  .brand h1{font-family:"Fira Code",monospace;font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#f3f4f6}
+  .brand .sub{font-size:11px;color:var(--faint);letter-spacing:.22em;text-transform:uppercase;font-family:"Fira Code",monospace}
+  .live{display:inline-flex;align-items:center;gap:7px;margin-left:6px;padding:4px 10px;border-radius:999px;background:rgba(79,165,135,.08);border:1px solid rgba(79,165,135,.24);font-size:11px;color:#8fd0b6;letter-spacing:.08em;font-family:"Fira Code",monospace}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--c-ok);box-shadow:0 0 0 0 rgba(79,165,135,.5);animation:pulse 2.4s ease-out infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(79,165,135,.45)}70%{box-shadow:0 0 0 7px rgba(79,165,135,0)}100%{box-shadow:0 0 0 0 rgba(79,165,135,0)}}
+
+  .toolbar{display:flex;align-items:center;gap:12px}
+  .seg{display:inline-flex;background:rgba(16,16,19,.9);border:1px solid var(--line);border-radius:10px;padding:3px;position:relative}
+  .seg button{appearance:none;border:0;background:transparent;color:var(--dim);cursor:pointer;font-family:"Fira Sans",sans-serif;font-size:13px;padding:6px 14px;border-radius:7px;transition:.18s}
+  .seg button:hover{color:var(--text)}
+  .seg button.active{background:var(--hi);color:#0a0a0c;font-weight:500;box-shadow:0 2px 14px rgba(255,255,255,.12),inset 0 1px 0 rgba(255,255,255,.5)}
+  .ghost{display:inline-flex;align-items:center;gap:7px;background:transparent;border:1px solid var(--line);color:var(--dim);border-radius:10px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.18s;font-family:"Fira Sans",sans-serif}
+  .ghost:hover{color:var(--text);border-color:#33333b}
+
+  .popwrap{position:relative}
+  .pop{position:absolute;top:46px;right:0;width:300px;z-index:20;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 24px 60px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.04)}
+  .pop h4{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);font-family:"Fira Code",monospace;margin-bottom:12px}
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+  .field label{font-size:12px;color:var(--dim)}
+  .field input{background:var(--bg-1);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px 10px;font-family:"Fira Code",monospace;font-size:13px}
+  .field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(90,160,168,.16)}
+  .quick{display:flex;gap:6px;margin:4px 0 12px}
+  .quick span{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer}
+  .quick span:hover{border-color:var(--accent);color:var(--text)}
+  .apply{width:100%;background:var(--hi);border:0;color:#0a0a0c;border-radius:9px;padding:9px;font-size:13px;font-weight:500;cursor:pointer;box-shadow:0 4px 16px rgba(255,255,255,.1)}
+
+  .hairline{height:1px;background:linear-gradient(90deg,transparent,rgba(90,160,168,.45),rgba(255,255,255,.18),transparent);margin-bottom:24px}
+
+  .kicker{font-family:"Fira Code",monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:10px;margin-bottom:13px}
+  .kicker::before{content:"";width:14px;height:1px;background:var(--accent);opacity:.5}
+  .panel{background:linear-gradient(180deg,var(--panel),#0b0b0e);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 1px 0 rgba(255,255,255,.025) inset, 0 18px 40px -28px rgba(0,0,0,.9);position:relative;overflow:hidden}
+  .panel::before{content:"";position:absolute;inset:0 0 auto 0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent)}
+
+  .rail{display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:14px}
+  .stat{padding:20px 22px;position:relative}
+  .stat + .stat::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:1px;background:var(--line-soft)}
+  .stat .lab{display:flex;align-items:center;gap:8px;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-family:"Fira Code",monospace}
+  .dot{width:6px;height:6px;border-radius:2px}
+  .stat .num{font-family:"Fira Code",monospace;font-weight:600;font-size:30px;letter-spacing:-.01em;margin-top:12px;line-height:1}
+  .stat .meta{font-size:12px;color:var(--faint);margin-top:9px;font-family:"Fira Code",monospace;display:flex;align-items:center;gap:6px}
+  .up{color:var(--c-ok)} .down{color:var(--c-fail)}
+  .spark{margin-top:10px}
+
+  .compose{padding:16px 22px 18px;margin-bottom:24px}
+  .compose .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .compose .top .t{font-size:13px;color:var(--text);font-weight:500}
+  .compose .top .tot{font-family:"Fira Code",monospace;font-size:12px;color:var(--dim)}
+  .bar{height:12px;border-radius:6px;overflow:hidden;display:flex;gap:2px;background:var(--bg-0)}
+  .bar i{display:block;height:100%}
+  .legend{display:flex;flex-wrap:wrap;gap:18px;margin-top:13px}
+  .legend .it{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)}
+  .legend .it b{color:var(--text);font-family:"Fira Code",monospace;font-weight:500}
+  .legend .sw{width:9px;height:9px;border-radius:3px}
+
+  .grid{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px}
+  .ph{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 6px}
+  .ph h3{font-size:14px;font-weight:600;color:#f3f4f6;display:flex;align-items:center;gap:9px}
+  .ph h3 .bar3{width:3px;height:14px;border-radius:2px;background:var(--accent)}
+  .ph .leg{display:flex;gap:14px;font-size:12px;color:var(--dim)}
+  .ph .leg .it{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .ph .leg .sw{width:10px;height:2px;border-radius:2px}
+  .pb{padding:6px 14px 16px}
+
+  .health{padding:18px 20px 20px}
+  .health .st{display:flex;align-items:center;gap:9px;font-size:14px;color:#bfe0d2;font-weight:500;margin-bottom:16px}
+  .hrow{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-top:1px solid var(--line-soft)}
+  .hrow .k{font-size:12.5px;color:var(--dim)}
+  .hrow .v{font-family:"Fira Code",monospace;font-size:13px;color:var(--text)}
+  .cap{display:flex;gap:7px;align-items:baseline}
+  .cap small{color:var(--faint);font-size:11px}
+  .refresh{margin-top:16px;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--bg-1);border:1px solid var(--line);color:var(--dim);border-radius:9px;padding:9px;font-size:13px;cursor:pointer}
+  .refresh:hover{color:var(--text);border-color:#33333b}
+
+  table{width:100%;border-collapse:collapse}
+  thead th{font-family:"Fira Code",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);text-align:right;padding:10px 16px;font-weight:500;border-bottom:1px solid var(--line)}
+  thead th:first-child{text-align:left}
+  tbody td{padding:14px 16px;text-align:right;border-bottom:1px solid var(--line-soft);font-family:"Fira Code",monospace;font-size:13.5px}
+  tbody td:first-child{text-align:left;font-family:"Fira Sans",sans-serif;color:var(--text)}
+  tbody tr:hover{background:rgba(90,160,168,.045)}
+  tbody tr:last-child td{border-bottom:0}
+  .acct{display:flex;flex-direction:column;gap:6px}
+  .acct .em{font-size:13.5px}
+  .mix{height:5px;width:170px;border-radius:3px;overflow:hidden;display:flex;gap:1.5px;background:var(--bg-0)}
+  .mix i{height:100%}
+  .fail0{color:var(--faint)} .failn{color:var(--c-fail)}
+  .pill{font-size:10px;color:var(--c-fail);border:1px solid rgba(213,95,110,.4);border-radius:5px;padding:1px 5px;margin-left:6px}
+
+  .note{margin-top:26px;padding:14px 18px;border:1px dashed var(--line);border-radius:10px;color:var(--faint);font-size:12.5px;line-height:1.7}
+  .note b{color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M3 17l5-6 4 4 4-7 5 8" stroke="#5aa0a8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="8" cy="11" r="1.6" fill="#74b0a2"/><circle cx="16" cy="8" r="1.6" fill="#74b0a2"/>
+        </svg>
+      </div>
+      <div>
+        <h1>CPA Usage Lens</h1>
+        <div class="sub">Usage&nbsp;·&nbsp;Cost&nbsp;·&nbsp;Models</div>
+      </div>
+      <span class="live"><span class="pulse"></span>采集中</span>
+    </div>
+    <div class="toolbar">
+      <div class="seg">
+        <button>今天</button>
+        <button>近7天</button>
+        <button>近30天</button>
+        <button class="active">自定义</button>
+      </div>
+      <div class="popwrap">
+        <button class="ghost">↩ 退出</button>
+        <div class="pop">
+          <h4>选择日期范围</h4>
+          <div class="quick"><span>近 14 天</span><span>本月</span><span>上月</span></div>
+          <div class="field"><label>开始</label><input value="2026-05-25" /></div>
+          <div class="field"><label>结束</label><input value="2026-05-31" /></div>
+          <button class="apply">应用范围</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <div class="hairline"></div>
+
+  <div class="kicker">01 — 周期总览 · 近 7 天</div>
+  <div class="panel rail">
+    <div class="stat">
+      <div class="lab"><span class="dot" style="background:var(--c-req)"></span>总请求</div>
+      <div class="num">1,284</div>
+      <div class="meta"><span class="up">▲ 8.2%</span> vs 上一周期</div>
+    </div>
+    <div class="stat">
+      <div class="lab"><span class="dot" style="background:var(--c-tok)"></span>总 Token</div>
+      <div class="num" style="color:#c5dde0">8,452,100</div>
+      <svg class="spark" width="150" height="22" viewBox="0 0 150 22"><polyline points="0,16 25,11 50,17 75,7 100,3 125,12 150,13" fill="none" stroke="#56a0ab" stroke-width="1.6"/></svg>
+    </div>
+    <div class="stat">
+      <div class="lab"><span class="dot" style="background:var(--c-cost)"></span>总成本</div>
+      <div class="num" style="color:#e3c188">$17.42</div>
+      <div class="meta"><span class="down">▲ 3.1%</span> 含缓存折扣</div>
+    </div>
+    <div class="stat">
+      <div class="lab"><span class="dot" style="background:var(--c-fail)"></span>失败数</div>
+      <div class="num" style="color:#e08793">9</div>
+      <div class="meta">失败率 0.70%</div>
+    </div>
+  </div>
+
+  <div class="panel compose">
+    <div class="top">
+      <div class="t">Token 构成</div>
+      <div class="tot">8,452,100 tokens</div>
+    </div>
+    <div class="bar">
+      <i style="width:61.6%;background:#4fa8b8"></i>
+      <i style="width:21.5%;background:#52a88e"></i>
+      <i style="width:14.0%;background:#6fb87c"></i>
+      <i style="width:2.9%;background:#54545e"></i>
+    </div>
+    <div class="legend">
+      <div class="it"><span class="sw" style="background:#4fa8b8"></span>输入 <b>5,210,400</b></div>
+      <div class="it"><span class="sw" style="background:#52a88e"></span>输出 <b>1,820,700</b></div>
+      <div class="it"><span class="sw" style="background:#6fb87c"></span>缓存读 <b>1,180,300</b></div>
+      <div class="it"><span class="sw" style="background:#54545e"></span>缓存写 <b>240,700</b></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="ph">
+        <h3><span class="bar3"></span>每日趋势</h3>
+        <div class="leg">
+          <div class="it"><span class="sw" style="background:#56a0ab"></span>Token（左轴）</div>
+          <div class="it"><span class="sw" style="background:#c99a52"></span>成本（右轴）</div>
+          <div class="it" style="opacity:.45"><span class="sw" style="background:#a8abb5"></span>请求</div>
+        </div>
+      </div>
+      <div class="pb">
+        <svg width="100%" height="250" viewBox="0 0 720 250" preserveAspectRatio="none" font-family="Fira Code">
+          <defs>
+            <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#56a0ab" stop-opacity="0.22"/>
+              <stop offset="100%" stop-color="#56a0ab" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <g stroke="#1d1d22" stroke-width="1">
+            <line x1="56" y1="30" x2="664" y2="30" stroke-dasharray="3 5"/>
+            <line x1="56" y1="80" x2="664" y2="80" stroke-dasharray="3 5"/>
+            <line x1="56" y1="130" x2="664" y2="130" stroke-dasharray="3 5"/>
+            <line x1="56" y1="180" x2="664" y2="180" stroke-dasharray="3 5"/>
+            <line x1="56" y1="210" x2="664" y2="210"/>
+          </g>
+          <g fill="#54545e" font-size="10" text-anchor="end">
+            <text x="48" y="34">2.4M</text><text x="48" y="84">1.8M</text><text x="48" y="134">1.2M</text><text x="48" y="184">0.6M</text>
+          </g>
+          <g fill="#6f6044" font-size="10" text-anchor="start">
+            <text x="672" y="34">$5</text><text x="672" y="84">$3.8</text><text x="672" y="134">$2.5</text><text x="672" y="184">$1.3</text>
+          </g>
+          <path d="M56,135 L157,93 L258,152 L359,77 L460,44 L561,118 L662,121 L662,210 L56,210 Z" fill="url(#tg)"/>
+          <polyline points="56,135 157,93 258,152 359,77 460,44 561,118 662,121" fill="none" stroke="#56a0ab" stroke-width="2.2"/>
+          <g fill="#0a0a0c" stroke="#56a0ab" stroke-width="2"><circle cx="460" cy="44" r="3.4"/><circle cx="662" cy="121" r="3.4"/></g>
+          <polyline points="56,162 157,118 258,178 359,102 460,71 561,148 662,148" fill="none" stroke="#c99a52" stroke-width="2"/>
+          <g fill="#c99a52"><circle cx="460" cy="71" r="2.6"/></g>
+          <g fill="#54545e" font-size="10" text-anchor="middle">
+            <text x="56" y="228">5/25</text><text x="157" y="228">5/26</text><text x="258" y="228">5/27</text><text x="359" y="228">5/28</text><text x="460" y="228">5/29</text><text x="561" y="228">5/30</text><text x="662" y="228">5/31</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel health">
+      <div class="kicker" style="margin-bottom:14px">02 — 采集器</div>
+      <div class="st"><span class="pulse"></span>采集中 · 健康</div>
+      <div class="hrow"><span class="k">采集延迟</span><span class="v" style="color:#8fd0b6">3s 前</span></div>
+      <div class="hrow"><span class="k">已采集</span><span class="v">1,284 条</span></div>
+      <div class="hrow"><span class="k">游标时间</span><span class="v">15:21:08</span></div>
+      <div class="hrow"><span class="k">数据库占用</span><span class="v cap">明细 80<small>KB</small> <span style="color:var(--faint)">/</span> 聚合 64<small>KB</small></span></div>
+      <button class="refresh">⟳ 刷新价格表</button>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:14px">
+    <div class="ph">
+      <h3><span class="bar3" style="background:#56a0ab"></span>每日模型用量 <span style="font-size:11px;color:var(--faint);font-family:'Fira Code';letter-spacing:.1em;margin-left:4px">100% · BY TOKEN</span></h3>
+      <div class="leg">
+        <div class="it"><span class="sw" style="background:var(--m1);width:10px;height:10px;border-radius:3px"></span>opus-4</div>
+        <div class="it"><span class="sw" style="background:var(--m2);width:10px;height:10px;border-radius:3px"></span>sonnet-4</div>
+        <div class="it"><span class="sw" style="background:var(--m3);width:10px;height:10px;border-radius:3px"></span>gpt-4o</div>
+        <div class="it"><span class="sw" style="background:var(--m4);width:10px;height:10px;border-radius:3px"></span>gemini-2.5</div>
+      </div>
+    </div>
+    <div class="pb">
+      <svg width="100%" height="220" viewBox="0 0 720 220" preserveAspectRatio="none" font-family="Fira Code">
+        <g fill="#54545e" font-size="10" text-anchor="end">
+          <text x="40" y="20">100%</text><text x="40" y="105">50%</text><text x="40" y="192">0%</text>
+        </g>
+        <g stroke="#1d1d22" stroke-dasharray="3 5"><line x1="48" y1="16" x2="700" y2="16"/><line x1="48" y1="101" x2="700" y2="101"/><line x1="48" y1="188" x2="700" y2="188"/></g>
+        <g stroke="#0a0a0c" stroke-width="2.5">
+          <rect x="62" y="16" width="56" height="94.6" rx="3" fill="var(--m1)"/>
+          <rect x="62" y="110.6" width="56" height="43" fill="var(--m2)"/>
+          <rect x="62" y="153.6" width="56" height="20.6" fill="var(--m3)"/>
+          <rect x="62" y="174.2" width="56" height="13.8" fill="var(--m4)"/>
+        </g>
+        <g stroke="#0a0a0c" stroke-width="2.5">
+          <rect x="151" y="16" width="56" height="82.6" rx="3" fill="var(--m1)"/>
+          <rect x="151" y="98.6" width="56" height="51.6" fill="var(--m2)"/>
+          <rect x="151" y="150.2" width="56" height="25.8" fill="var(--m3)"/>
+          <rect x="151" y="176" width="56" height="12" fill="var(--m4)"/>
+        </g>
+        <g stroke="#0a0a0c" stroke-width="2.5">
+          <rect x="240" y="16" width="56" height="103.2" rx="3" fill="var(--m1)"/>
+          <rect x="240" y="119.2" width="56" height="34.4" fill="var(--m2)"/>
+          <rect x="240" y="153.6" width="56" height="20.6" fill="var(--m3)"/>
+          <rect x="240" y="174.2" width="56" height="13.8" fill="var(--m4)"/>
+        </g>
+        <g stroke="#0a0a0c" stroke-width="2.5">
+          <rect x="329" y="16" width="56" height="89.4" rx="3" fill="var(--m1)"/>
+          <rect x="329" y="105.4" width="56" height="48.2" fill="var(--m2)"/>
+          <rect x="329" y="153.6" width="56" height="22.4" fill="var(--m3)"/>
+          <rect x="329" y="176" width="56" height="12" fill="var(--m4)"/>
+          <rect x="327" y="14" width="60" height="176" rx="4" fill="none" stroke="#86c2b8" stroke-width="1.5" opacity=".7"/>
+        </g>
+        <g stroke="#0a0a0c" stroke-width="2.5">
+          <rect x="418" y="16" width="56" height="77.4" rx="3" fill="var(--m1)"/>
+          <rect x="418" y="93.4" width="56" height="56.8" fill="var(--m2)"/>
+          <rect x="418" y="150.2" width="56" height="24.1" fill="var(--m3)"/>
+          <rect x="418" y="174.3" width="56" height="13.7" fill="var(--m4)"/>
+        </g>
+        <g stroke="#0a0a0c" stroke-width="2.5">
+          <rect x="507" y="16" width="56" height="99.8" rx="3" fill="var(--m1)"/>
+          <rect x="507" y="115.8" width="56" height="37.8" fill="var(--m2)"/>
+          <rect x="507" y="153.6" width="56" height="20.6" fill="var(--m3)"/>
+          <rect x="507" y="174.2" width="56" height="13.8" fill="var(--m4)"/>
+        </g>
+        <g stroke="#0a0a0c" stroke-width="2.5">
+          <rect x="596" y="16" width="56" height="106.6" rx="3" fill="var(--m1)"/>
+          <rect x="596" y="122.6" width="56" height="41.3" fill="var(--m2)"/>
+          <rect x="596" y="163.9" width="56" height="17.2" fill="var(--m3)"/>
+          <rect x="596" y="181.1" width="56" height="6.9" fill="var(--m4)"/>
+        </g>
+        <g fill="#54545e" font-size="10" text-anchor="middle">
+          <text x="90" y="206">5/25</text><text x="179" y="206">5/26</text><text x="268" y="206">5/27</text><text x="357" y="206">5/28</text><text x="446" y="206">5/29</text><text x="535" y="206">5/30</text><text x="624" y="206">5/31</text>
+        </g>
+        <g transform="translate(300,28)">
+          <rect width="150" height="92" rx="8" fill="#101013" stroke="#242429"/>
+          <text x="12" y="22" fill="#ecedef" font-size="11">5月28日</text>
+          <g font-size="10.5">
+            <circle cx="16" cy="40" r="4" fill="var(--m1)"/><text x="26" y="44" fill="#8e8e98">opus-4</text><text x="138" y="44" fill="#ecedef" text-anchor="end">52%</text>
+            <circle cx="16" cy="58" r="4" fill="var(--m2)"/><text x="26" y="62" fill="#8e8e98">sonnet-4</text><text x="138" y="62" fill="#ecedef" text-anchor="end">28%</text>
+            <circle cx="16" cy="76" r="4" fill="var(--m3)"/><text x="26" y="80" fill="#8e8e98">gpt-4o</text><text x="138" y="80" fill="#ecedef" text-anchor="end">13%</text>
+          </g>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ph"><h3><span class="bar3" style="background:#c99a52"></span>各账号用量</h3><div class="leg" style="font-size:11px;color:var(--faint)">按成本降序 ↓</div></div>
+    <div style="padding:4px 6px 8px">
+      <table>
+        <thead><tr><th>账号 / Token 构成</th><th>请求</th><th>Token</th><th>成本</th><th>失败</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><div class="acct"><span class="em">srwmh842nw@privaterelay.appleid.com</span>
+              <span class="mix"><i style="width:60%;background:#4fa8b8"></i><i style="width:22%;background:#52a88e"></i><i style="width:15%;background:#6fb87c"></i><i style="width:3%;background:#54545e"></i></span></div></td>
+            <td>612</td><td>4,210,500</td><td style="color:#e3c188">$8.6210</td><td class="failn">4 <span class="pill">err</span></td>
+          </tr>
+          <tr>
+            <td><div class="acct"><span class="em">code4j.yu.1988@gmail.com</span>
+              <span class="mix"><i style="width:64%;background:#4fa8b8"></i><i style="width:20%;background:#52a88e"></i><i style="width:13%;background:#6fb87c"></i><i style="width:3%;background:#54545e"></i></span></div></td>
+            <td>588</td><td>3,920,300</td><td style="color:#e3c188">$7.9130</td><td class="fail0">0</td>
+          </tr>
+          <tr>
+            <td><div class="acct"><span class="em">jack@llmisland.com</span>
+              <span class="mix"><i style="width:48%;background:#4fa8b8"></i><i style="width:30%;background:#52a88e"></i><i style="width:18%;background:#6fb87c"></i><i style="width:4%;background:#54545e"></i></span></div></td>
+            <td>84</td><td>321,300</td><td style="color:#e3c188">$0.8900</td><td class="failn">5 <span class="pill">err</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>设计稿说明（非最终代码）：</b>「Carbon 碳黑 · 哑光」方向 · 纯黑碳基 + 白色 UI 强调 + <b>哑光</b>青/灰绿数据点缀（降饱和、不刺眼）· 成本古铜 · 顶部冷白微光 · Fira Code 数字 · 横向指标台 · Token 构成条 · 趋势图双轴 · 模型用量按天 100% 堆叠柱 · 自定义日期 popover · 账号榜带构成迷你条。颜色全走 CSS 变量，预留亮色主题接口。
+  </div>
+
+</div>
+</body>
+</html>

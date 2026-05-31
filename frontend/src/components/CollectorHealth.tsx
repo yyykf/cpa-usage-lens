@@ -1,101 +1,91 @@
-import { Activity, AlertCircle, Database, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { AlertCircle, RefreshCw } from 'lucide-react'
+import { Panel, Kicker } from './dashboard/Primitives'
+import { PulseDot } from './dashboard/LivePulse'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { formatBytes, formatLag, formatClock, formatInt } from '@/lib/format'
 import type { CollectorHealth } from '../types'
 
-interface CollectorHealthProps {
+interface Props {
   health: CollectorHealth
-  onRefreshPrices?: () => void
+  loading: boolean
+  onRefreshPrices?: () => void | Promise<void>
 }
 
-// 把字节数格式化为 B / KB / MB（保留一位小数，整数不带小数点）
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  const kb = n / 1024
-  if (kb < 1024) return `${kb % 1 === 0 ? kb : kb.toFixed(1)} KB`
-  const mb = kb / 1024
-  return `${mb % 1 === 0 ? mb : mb.toFixed(1)} MB`
+const STATUS: Record<CollectorHealth['status'], { tone: 'success' | 'error' | 'idle'; label: string }> = {
+  running: { tone: 'success', label: '采集中 · 健康' },
+  error: { tone: 'error', label: '异常' },
+  stale: { tone: 'idle', label: '空闲' },
 }
 
-// 把"距上次数据"的秒数格式化为人类可读：<60s 显示秒，<1h 显示分，否则 时+分
-function formatLag(sec: number): string {
-  if (sec < 60) return `${sec}s 前`
-  if (sec < 3600) return `${Math.floor(sec / 60)}m 前`
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  return m > 0 ? `${h}h ${m}m 前` : `${h}h 前`
-}
+export default function CollectorHealthCard({ health, loading, onRefreshPrices }: Props) {
+  const [refreshing, setRefreshing] = useState(false)
+  const status = STATUS[health.status]
+  const lag = health.lagSeconds === null ? '—' : formatLag(health.lagSeconds)
 
-const STATUS_CONFIG: Record<
-  CollectorHealth['status'],
-  { dot: string; label: string }
-> = {
-  running: { dot: 'bg-data-success', label: '采集中' },
-  error: { dot: 'bg-destructive', label: '异常' },
-  stale: { dot: 'bg-muted-foreground', label: '空闲' },
-}
-
-export default function CollectorHealth({
-  health,
-  onRefreshPrices,
-}: CollectorHealthProps) {
-  const status = STATUS_CONFIG[health.status]
-  const lag: string =
-    health.lagSeconds === null ? '—' : formatLag(health.lagSeconds)
+  const handleRefresh = async () => {
+    if (!onRefreshPrices) return
+    try {
+      setRefreshing(true)
+      await onRefreshPrices()
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 md:p-6 hover:border-primary/40 transition-colors">
-      <div className="mb-4 flex items-center gap-2">
-        <Activity className="w-5 h-5 text-muted-foreground" />
-        <h3 className="text-base font-semibold text-foreground">采集器健康</h3>
+    <Panel className="flex h-full flex-col px-5 pb-5 pt-4">
+      <Kicker className="mb-3.5">02 — 采集器</Kicker>
+
+      <div className="mb-4 flex items-center gap-2.5 text-sm font-medium text-foreground">
+        <PulseDot tone={status.tone} />
+        <span className={cn(status.tone === 'error' && 'text-destructive')}>{loading ? '加载中…' : status.label}</span>
       </div>
 
-      <div className="mb-4 flex items-center gap-2">
-        <span
-          className={`inline-block w-2.5 h-2.5 rounded-full ${status.dot}`}
-        />
-        <span className="text-sm text-foreground">{status.label}</span>
-      </div>
-
-      <dl className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-sm text-muted-foreground">采集延迟</dt>
-          <dd className="font-num text-sm text-foreground">{lag}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-sm text-muted-foreground">已采集</dt>
-          <dd className="font-num text-sm text-foreground">
-            {health.eventsIngested.toLocaleString()} 条
-          </dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Database className="w-4 h-4" />
-            数据库占用
-          </dt>
-          <dd className="font-num text-sm text-foreground">
-            明细 {formatBytes(health.hotBytes)} / 聚合{' '}
-            {formatBytes(health.dailyBytes)}
-          </dd>
-        </div>
+      <dl className="flex flex-col">
+        <Row k="采集延迟" loading={loading}>
+          <span className={cn(status.tone === 'success' && 'text-data-success')}>{lag}</span>
+        </Row>
+        <Row k="已采集" loading={loading}>
+          {formatInt(health.eventsIngested)} 条
+        </Row>
+        <Row k="游标时间" loading={loading}>
+          {formatClock(health.lastEventTs)}
+        </Row>
+        <Row k="数据库占用" loading={loading}>
+          <span className="inline-flex items-baseline gap-1.5">
+            明细 {formatBytes(health.hotBytes)}
+            <span className="text-faint">/</span>
+            聚合 {formatBytes(health.dailyBytes)}
+          </span>
+        </Row>
       </dl>
 
-      {health.lastError !== '' && (
-        <div
-          className="mt-4 flex items-center gap-1.5 text-destructive text-sm truncate"
-          title={health.lastError}
-        >
-          <AlertCircle className="w-4 h-4 shrink-0" />
+      {!loading && health.lastError !== '' && (
+        <div className="mt-3 flex items-center gap-1.5 truncate text-xs text-destructive" title={health.lastError}>
+          <AlertCircle className="size-3.5 shrink-0" />
           <span className="truncate">{health.lastError}</span>
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={onRefreshPrices}
-        className="mt-5 inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground hover:border-primary/40 hover:text-primary transition-colors"
-      >
-        <RefreshCw className="w-4 h-4" />
-        刷新价格表
-      </button>
+      <div className="mt-auto pt-4">
+        <Button type="button" variant="outline" className="w-full" onClick={handleRefresh} disabled={refreshing}>
+          <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
+          {refreshing ? '刷新中…' : '刷新价格表'}
+        </Button>
+      </div>
+    </Panel>
+  )
+}
+
+function Row({ k, children, loading }: { k: string; children: React.ReactNode; loading: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-border-soft py-2.5">
+      <dt className="text-[12.5px] text-muted-foreground">{k}</dt>
+      <dd className="font-num text-[13px] text-foreground">
+        {loading ? <span className="inline-block h-3.5 w-16 animate-pulse rounded bg-muted align-middle" /> : children}
+      </dd>
     </div>
   )
 }

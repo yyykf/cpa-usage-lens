@@ -54,6 +54,15 @@ func (s *Server) handleTrend(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report.BuildTrend(rows, s.prices.Prices()))
 }
 
+// handleModels 返回模型用量分布（按 token，不涉及成本，故无需价格表）。
+func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
+	rows, ok := s.queryRange(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, report.BuildModelBreakdown(rows))
+}
+
 // queryRange 解析周期并查聚合行；出错时已写响应并返回 ok=false。
 func (s *Server) queryRange(w http.ResponseWriter, r *http.Request) ([]model.DailyUsage, bool) {
 	start, end, err := s.resolveRange(r)
