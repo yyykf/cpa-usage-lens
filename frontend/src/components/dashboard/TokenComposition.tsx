@@ -1,17 +1,13 @@
-import { Panel, TokenBar, type TokenSegment } from './Primitives'
-import { TOKEN_PART_COLORS } from '@/lib/charts'
+import { Panel, TokenBar } from './Primitives'
+import { tokenSegments } from '@/lib/tokens'
 import { formatInt } from '@/lib/format'
 import type { Overview } from '../../types'
 
-// Token 构成条：输入 / 输出 / 缓存读 / 缓存写 四段水平占比 + 图例带数值。
-// 分母用四段之和（计费视角的明细拆分），与 design-system / mockup 一致。
+// Token 构成条：输入 / 缓存读 / 缓存写 / 输出 四段水平占比 + 图例带数值。
+// 四段经 tokenSegments 跨 provider 归一化（OpenAI 的 cachedTokens 计入缓存读）；
+// 分母用四段之和（= totalTokens），与 design-system / mockup 一致。
 export default function TokenComposition({ overview, loading }: { overview: Overview; loading: boolean }) {
-  const segments: TokenSegment[] = [
-    { label: '输入', value: overview.inputTokens, color: TOKEN_PART_COLORS.input },
-    { label: '输出', value: overview.outputTokens, color: TOKEN_PART_COLORS.output },
-    { label: '缓存读', value: overview.cacheReadTokens, color: TOKEN_PART_COLORS.cacheRead },
-    { label: '缓存写', value: overview.cacheCreationTokens, color: TOKEN_PART_COLORS.cacheCreation },
-  ]
+  const segments = tokenSegments(overview)
   const total = segments.reduce((s, seg) => s + seg.value, 0)
 
   return (

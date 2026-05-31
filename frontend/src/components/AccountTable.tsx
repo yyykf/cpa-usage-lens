@@ -2,24 +2,16 @@ import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, TriangleAlert } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Panel, PanelHeader, TokenBar, type TokenSegment } from './dashboard/Primitives'
+import { Panel, PanelHeader, TokenBar } from './dashboard/Primitives'
 import { Empty } from './dashboard/Empty'
 import { TableSkeleton } from './dashboard/TableSkeleton'
-import { CHART_COLORS, TOKEN_PART_COLORS } from '@/lib/charts'
+import { CHART_COLORS } from '@/lib/charts'
+import { tokenSegments } from '@/lib/tokens'
 import { formatInt, formatCost } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { AccountUsage } from '../types'
 
 type SortKey = 'requests' | 'tokens' | 'cost' | 'failed'
-
-function accountSegments(a: AccountUsage): TokenSegment[] {
-  return [
-    { label: '输入', value: a.inputTokens, color: TOKEN_PART_COLORS.input },
-    { label: '输出', value: a.outputTokens, color: TOKEN_PART_COLORS.output },
-    { label: '缓存读', value: a.cacheReadTokens, color: TOKEN_PART_COLORS.cacheRead },
-    { label: '缓存写', value: a.cacheCreationTokens, color: TOKEN_PART_COLORS.cacheCreation },
-  ]
-}
 
 export default function AccountTable({ accounts, loading }: { accounts: AccountUsage[]; loading: boolean }) {
   const [sortKey, setSortKey] = useState<SortKey>('cost')
@@ -78,7 +70,7 @@ export default function AccountTable({ accounts, loading }: { accounts: AccountU
                   <TableCell className="whitespace-normal py-3.5">
                     <div className="flex flex-col gap-1.5">
                       <span className="font-sans text-[13.5px] text-foreground">{a.source}</span>
-                      <TokenBar segments={accountSegments(a)} variant="mini" />
+                      <TokenBar segments={tokenSegments(a)} variant="mini" />
                     </div>
                   </TableCell>
                   <TableCell className="py-3.5 text-right font-num text-[13.5px] text-foreground">{formatInt(a.requests)}</TableCell>
