@@ -1,4 +1,132 @@
-# 部署与运维说明
+# Deployment & Operations · 部署与运维
+
+[English](#english) · [简体中文](#chinese)
+
+<a id="english"></a>
+
+> **English** — 简体中文 version is [below](#chinese).
+
+## Prerequisites
+
+- A **Supabase project** (the free tier is enough — 500 MB comfortably holds ~1,000 requests/day)
+- A server that can run **Docker + Docker Compose**
+- A **CLIProxyAPI (CPA)** instance, version **v6.10.8+** (v7.1.x recommended), with management enabled
+
+---
+
+## 1. Create tables in Supabase
+
+Using the Supabase CLI (recommended — reproducible):
+
+```bash
+supabase link --project-ref <your-project-ref> -p '<db-password>'
+supabase db push --db-url "<Session pooler connection string>"
+```
+
+Or run `supabase/migrations/20260530185206_init_schema.sql` directly in the Supabase Dashboard's SQL Editor.
+
+> This creates 4 tables: `request_events_hot` (hot detail) / `daily_account_usage` (daily rollup) / `model_prices` (prices) / `collector_state` (collector state). All have RLS enabled with **no** policies — the backend connects directly via the connection string, the frontend never connects directly, and the Data API denies access by default.
+
+---
+
+## 2. Required CPA configuration (⚠️ miss any and the queue stays empty)
+
+In CPA's `config.yaml`, confirm:
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| `usage-statistics-enabled` | `true` | **Master switch for queue publishing** (the official comment calling this an "in-memory aggregation switch" is outdated — it actually gates the queue and must be `true`) |
+| `redis-usage-queue-retention-seconds` | `3600` | Queue retention window — **set it to the max of 3600** to give the collector a buffer for brief downtime |
+| `remote-management.secret-key` | set | Management key — a prerequisite for enabling the queue |
+
+---
+
+## 3. Configure `.env`
+
+Copy `.env.example` to `.env` and fill in:
+
+| Variable | Description |
+|----------|-------------|
+| `CPA_BASE_URL` | CPA address, e.g. `https://your-cpa-host.com` |
+| `CPA_MANAGEMENT_KEY` | CPA management secret key |
+| `DATABASE_URL` | Supabase **Session pooler** connection string (include `?sslmode=require`) |
+| `DASHBOARD_PASSWORD` | Login password (injected in plaintext; the backend verifies with bcrypt and never stores it) |
+| `AUTH_TOKEN_SECRET` | Token-signing secret — generate with `openssl rand -hex 32` |
+| `COLLECTOR_POLL_INTERVAL_SECONDS` | Collector poll interval (default 3, **must be far smaller than retention**) |
+| `COLLECTOR_BATCH_SIZE` | Records popped per poll (default 200) |
+| `HOT_RETENTION_DAYS` | Hot-detail retention in days (default 7, can be increased) |
+| `ROLLUP_INTERVAL_SECONDS` | Rollup + cleanup interval (default 60) |
+| `TIMEZONE` | Timezone — defines the boundaries of a "day" (default `Asia/Shanghai`) |
+
+---
+
+## 4. One-command deploy
+
+```bash
+docker compose up -d --build
+```
+
+- Frontend: open `http://<server-ip>:8088`
+- Backend: `:8080` (optional, debug only; you can drop the port mapping in production and let the frontend nginx reach it over the internal network)
+
+---
+
+## 5. Critical constraints & data-loss risks (must read)
+
+1. **Globally single collector** — only **one** instance of this tool may run against a given CPA queue. The queue has pop (take-and-delete) semantics; multiple instances steal each other's data.
+2. **Pop is not replayable** — requests produced while the collector is down for **longer than `redis-usage-queue-retention-seconds`** (default 60s, recommend 3600s) are **lost permanently**: CPA's queue is purely in-memory, never persisted, and cleared on expiry.
+3. **Disk buffer (cloud-edition protection)** — batches already popped from the queue but not yet confirmed written to Supabase are first buffered to the `backend-buffer` volume; they're deleted only after a successful write and auto-recovered on collector restart — avoiding "popped but never stored".
+4. **Never enable `SUBSCRIBE usage`** — as long as a subscriber is online, new records go only through pub/sub and never enter the FIFO queue, so the HTTP endpoint can't fetch them. This tool uses only `GET /usage-queue`; don't run another subscription-style consumer alongside it.
+5. **Keep the collector highly available** — compose sets `restart: unless-stopped`, so it comes back up automatically after a host reboot.
+
+---
+
+## 6. Read-only instance / iterative validation (`COLLECTOR_ENABLED`)
+
+The backend is a single process that by default runs everything at once: the background collector loop + rollup/cleanup scheduler + price refresh + query API. But the CPA queue is **pop-to-delete** and **only one collector may run globally** (constraint 1 above) — so you **cannot** simply spin up a second instance for validation (it would steal the queue and also trigger rollup/cleanup writes).
+
+For this, the `COLLECTOR_ENABLED` toggle (in `.env`, default `true`) exists:
+
+| Value | Behavior |
+|-------|----------|
+| `true` (default) | Normal instance: collect + rollup/cleanup + price refresh + query API (existing behavior, no change) |
+| `false` | **Read-only instance**: price refresh + query API only. **Does not consume the CPA queue, write to the DB, or rollup/cleanup** — so it won't steal from the running collector |
+
+Use case: during iteration/debugging (e.g. validating the frontend or a new query API), start a `COLLECTOR_ENABLED=false` instance on another machine or locally, pointed at the same Supabase, to query data read-only **without contending for the same CPA queue** as the production collector. Keep the production collector unique and `COLLECTOR_ENABLED=true`.
+
+> Note: `COLLECTOR_ENABLED=false` merely stops queue consumption — it does **not** relax the hard "one collector per CPA queue" constraint; it exists precisely to let you validate without violating it. Price-table upserts are idempotent, so a read-only instance can still compute cost.
+
+---
+
+## 7. Capacity assumptions
+
+- **Bounded detail** — size ≈ retention days × daily request volume (default 7 days); it has a ceiling and does **not** grow unbounded over time.
+- **Tiny aggregates** — each `daily_account_usage` row is small and grows by account × model × day, slowly.
+- At ~**1,000 requests/day**, 7 days of detail + long-term aggregates **fit comfortably within Supabase Free's 500 MB**.
+- The dashboard's collector-health card shows **real table sizes** (detail / aggregate separately, as absolute values — no percentages, since plan quotas differ).
+
+---
+
+## 8. Cost estimation
+
+- Uses the **LiteLLM price table** (`model_prices_and_context_window.json` from `BerriAI/litellm`).
+- **Query-time calculation**: cost = tokens × current unit price; cost is never stored in the DB. Change a price and historical data automatically reflects it — no backfill.
+- **Stores only used models**: fetched on startup + auto-refreshed daily + manually refreshable from the page.
+- Models without a price show **"unknown"** and take effect automatically once a price is added.
+
+---
+
+## 9. Shutdown & rollback
+
+- Collector interruption/restart: the disk buffer auto-recovers; but data lost during downtime exceeding retention can't be recovered (see risk 2).
+- Queue backlog: under normal load, `count=200` + 3s polling is enough to keep up; if the backlog is severe, temporarily raise `COLLECTOR_BATCH_SIZE`.
+- Deleting old detail never loses aggregates: cleanup always first confirms the day has been rolled up (the deletion window > the aggregate-recompute window).
+
+---
+
+<a id="chinese"></a>
+
+> **简体中文** —— English version is [above](#english).
 
 ## 前置要求
 
@@ -61,7 +189,7 @@ docker compose up -d --build
 ```
 
 - 前端：浏览器访问 `http://<服务器IP>:8088`
-- 后端：`:8080`（可选，仅调试用；生产可在 compose 去掉端口映射）
+- 后端：`:8080`（可选，仅调试用；生产可在 compose 去掉端口映射，仅由 frontend nginx 内网访问）
 
 ---
 
