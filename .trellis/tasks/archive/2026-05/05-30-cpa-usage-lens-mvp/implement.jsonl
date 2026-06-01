@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "backend 规范入口，Go 服务整体约定"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "backend 目录结构约定"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Supabase/Postgres 表设计与查询规范（本项目核心数据层：明细/聚合/价格/状态表）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "采集/写库/价格刷新的错误处理（防丢数据缓冲、重试）"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "frontend 规范入口"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "frontend 目录结构约定"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "React 组件规范（dashboard 各模块）"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "前端状态管理（周期切换、数据查询）"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "前后端数据流一致性（队列字段→明细→聚合→API→页面）"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用既有模式、避免重复"}
+{"file": ".trellis/tasks/05-30-cpa-usage-lens-mvp/research/cpa-usage-queue-viability.md", "reason": "采集硬约束（单采集器/pop不可回放/版本下限/usage-statistics-enabled），实现采集器必读"}
+{"file": ".trellis/tasks/05-30-cpa-usage-lens-mvp/research/reference-implementations.md", "reason": "竞品参考（request_id 去重/UNIQUE 幂等/采集方式/LiteLLM 成本估算）"}
+{"file": ".project_context/explore/frontend/design-system.md", "reason": "前端视觉风格规范（PR6 照此落地：配色变量/字体/Bento 布局/组件/图表/a11y）"}

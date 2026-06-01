@@ -1,6 +1,7 @@
 # OS / Editor
 .DS_Store
 *.swp
+.idea/
 
 # Local / private config
 .claude/settings.local.json
@@ -21,3 +22,13 @@ backend/bin/
 
 # Removed local preview sandbox (kept ignored to avoid accidental re-add)
 local-preview/
+
+# Playwright / E2E 临时产物
+.playwright-cli/
+/dashboard.yaml
+/dashboard-e2e.png
+
+# 前端 TS 构建产物（tsc -b 增量缓存 + 编译出的 vite 配置）
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts

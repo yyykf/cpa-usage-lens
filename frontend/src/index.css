@@ -1,0 +1,219 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap')
+layer(base);
+@import 'tailwindcss';
+
+@plugin 'tailwindcss-animate';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-border-soft: hsl(var(--border-soft));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-faint: hsl(var(--faint));
+  --color-data-requests: hsl(var(--data-requests));
+  --color-data-tokens: hsl(var(--data-tokens));
+  --color-data-cost: hsl(var(--data-cost));
+  --color-data-failed: hsl(var(--data-failed));
+  --color-data-success: hsl(var(--data-success));
+  --color-model-1: hsl(var(--m1));
+  --color-model-2: hsl(var(--m2));
+  --color-model-3: hsl(var(--m3));
+  --color-model-4: hsl(var(--m4));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --font-sans: 'Fira Sans', system-ui, sans-serif;
+  --font-mono: 'Fira Code', ui-monospace, monospace;
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-caret-blink: caret-blink 1.25s ease-out infinite;
+  --animate-pulse-ring: pulse 2.4s ease-out infinite;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  @keyframes caret-blink {
+    0%,
+    70%,
+    100% {
+      opacity: 1;
+    }
+    20%,
+    50% {
+      opacity: 0;
+    }
+  }
+  @keyframes pulse {
+    0% {
+      box-shadow: 0 0 0 0 hsl(var(--data-success) / 0.45);
+    }
+    70% {
+      box-shadow: 0 0 0 7px hsl(var(--data-success) / 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--data-success) / 0);
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+/*
+ * CPA Usage Lens — 碳黑精密仪表台（Carbon Instrument Console）
+ * 颜色全部以 CSS 变量声明（shadcn HSL 通道格式，支持 /alpha 修饰）。
+ * :root = 暗色默认（MVP 仅暗色）；未来加亮色只需新增同名变量覆盖（如 [data-theme="light"]），组件层不改。
+ */
+@layer base {
+  :root {
+    --background: 240 14.3% 2.7%; /* #060608 碳黑底 */
+    --foreground: 220 8.6% 93.1%; /* #ECEDEF 近白主文字 */
+    --card: 240 8.6% 6.9%; /* #101013 卡片背景 */
+    --card-foreground: 220 8.6% 93.1%;
+    --popover: 240 10.2% 9.6%; /* #16161B 弹层 */
+    --popover-foreground: 220 8.6% 93.1%;
+    --muted: 240 10.6% 9.2%; /* #15151A 次级背景 / 行 hover */
+    --muted-foreground: 240 4.6% 57.6%; /* #8E8E98 次要文字 */
+    --faint: 240 5.6% 34.9%; /* #54545E 最弱：刻度/编号/轴 tick */
+    --border: 240 6.5% 15.1%; /* #242429 卡片边框 */
+    --border-soft: 240 7.1% 11%; /* #1A1A1E 弱分隔 */
+    --input: 240 6.5% 15.1%;
+    --primary: 240 4.8% 95.9%; /* #F4F4F5 UI 强调=白 */
+    --primary-foreground: 240 9.1% 4.3%; /* #0A0A0C */
+    --secondary: 240 9.8% 10%; /* #17171C */
+    --secondary-foreground: 220 8.6% 93.1%;
+    --accent: 186 31% 50.6%; /* #5AA0A8 哑光青：focus/刻度/hairline */
+    --accent-foreground: 240 14.3% 2.7%;
+    --ring: 186 31% 50.6%;
+    --destructive: 352 58.4% 60.4%; /* #D55F6E 哑光红 */
+    --destructive-foreground: 220 8.6% 93.1%;
+
+    /* 背景层次（点阵 / panel 渐变底） */
+    --bg-1: 240 9.1% 4.3%; /* #0A0A0C */
+
+    /* 数据语义色（哑光，全站固定语义） */
+    --data-requests: 226 8.1% 68.4%; /* #A8ABB5 请求-银灰 */
+    --data-tokens: 188 33.6% 50.4%; /* #56A0AB token-哑光青 */
+    --data-cost: 36 52.4% 55.5%; /* #C99A52 成本-古铜 */
+    --data-failed: 352 58.4% 60.4%; /* #D55F6E 失败-哑光红 */
+    --data-success: 159 35.2% 47.8%; /* #4FA587 健康-哑光绿 */
+
+    /* 模型分布色阶（青→黄绿，明度梯度，配段间深间隙保证分界） */
+    --m1: 189 42.5% 51.6%; /* #4FA8B8 */
+    --m2: 162 34.4% 49%; /* #52A88E */
+    --m3: 131 34% 57.8%; /* #6FB87C */
+    --m4: 103 32.6% 66.3%; /* #9DC58D */
+
+    --radius: 0.75rem; /* 12px */
+    /* radius 派生（供 shadcn 组件内 min(var(--radius-md),Npx) 等求值，v3 下需显式定义） */
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+    color-scheme: dark;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-family: 'Fira Sans', system-ui, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    /* 仪器台氛围：极淡点阵 + 顶部冷白微光（哑光、克制，去 AI 味） */
+    background-image:
+      radial-gradient(1100px 460px at 80% -10%, rgba(255, 255, 255, 0.045), transparent 60%),
+      radial-gradient(820px 400px at 6% -8%, rgba(90, 160, 168, 0.045), transparent 58%),
+      radial-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+    background-size: auto, auto, 22px 22px;
+    background-attachment: fixed;
+  }
+
+  /* 所有可点元素：指针光标（shadcn --pointer 行为补充） */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* 数字统一用 Fira Code（等宽，纵向对齐、技术感） */
+.font-num {
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

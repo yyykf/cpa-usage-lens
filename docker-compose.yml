@@ -1,0 +1,21 @@
+# CPA Usage Lens — 一键部署（backend + frontend 两个轻量容器；数据库用 Supabase 云，不进 compose）
+services:
+  backend:
+    build: ./backend
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - backend-buffer:/data/buffer # 落盘缓冲持久化（防采集器重启丢"已 pop 未写库"数据）
+    ports:
+      - "8080:8080" # 可选：暴露后端便于调试；生产可去掉，仅由 frontend nginx 内网访问
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8088:80" # 浏览器访问 http://<服务器IP>:8088
+
+volumes:
+  backend-buffer:

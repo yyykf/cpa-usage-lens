@@ -1,0 +1,50 @@
+# CI — build & test both layers on every push and pull request.
+# Backend (Go) and frontend (React/Vite) run as independent jobs.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Cancel superseded runs on the same ref so rapid pushes don't pile up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend · Go build / vet / test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # Single source of truth — tracks the version pinned in go.mod.
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: go build ./...
+      - run: go vet ./...
+      # -race catches data races in the concurrent collector / disk buffer.
+      - run: go test ./... -race
+
+  frontend:
+    name: Frontend · type-check / build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # `npm run build` = `tsc -b` (type-check) + `vite build` (production bundle).
+      # No unit tests on the frontend yet, so the type-check + build is the gate.
+      - run: npm run build
