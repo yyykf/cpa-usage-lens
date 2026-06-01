@@ -1,0 +1,48 @@
+name: Commit language check
+
+# Reject Chinese (Han) characters in PR commit messages and the PR title.
+# This is the server-side gate that local hooks cannot enforce on other people.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  commit-language:
+    name: Commit language check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Reject Chinese in commit messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "Checking commit messages in range ${BASE_SHA}..${HEAD_SHA}"
+          if git log --no-merges --format='%H %s%n%b' "${BASE_SHA}..${HEAD_SHA}" \
+               | perl -CSD -ne 'exit 1 if /\p{Han}/'; then
+            echo "OK: no Chinese (Han) characters in commit messages."
+          else
+            echo "::error::Commit message(s) contain Chinese (Han) characters. Use English (Conventional Commits)."
+            echo "Offending commits:"
+            git log --no-merges --format='%h  %s' "${BASE_SHA}..${HEAD_SHA}" \
+              | perl -CSD -ne 'print if /\p{Han}/'
+            exit 1
+          fi
+
+      - name: Reject Chinese in PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if printf '%s' "$PR_TITLE" | perl -CSD -ne 'exit 1 if /\p{Han}/'; then
+            echo "OK: PR title has no Chinese (Han) characters."
+          else
+            echo "::error::PR title contains Chinese (Han) characters: ${PR_TITLE}"
+            exit 1
+          fi

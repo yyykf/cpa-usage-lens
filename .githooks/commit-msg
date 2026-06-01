@@ -1,0 +1,42 @@
+#!/bin/sh
+#
+# commit-msg hook — reject commit messages that contain Chinese (Han) characters.
+#
+# Why: this repo requires commit messages to be written in English
+#      (Conventional Commits). A Chinese commit once slipped into main via a PR
+#      and had to be fixed with a force push. This hook stops it at commit time.
+#
+# How: git runs this script before creating a commit and passes the path of the
+#      commit-message file as $1. Exit code 0 = allow, non-zero = abort.
+#
+# Detection (uses the system perl):
+#      - skip comment lines starting with '#' (git strips them anyway)
+#      - stop at the verbose-diff scissors line "# ---- >8 ----" so Chinese text
+#        inside a diff (e.g. editing README.zh-CN.md with `git commit -v`) is not
+#        mistaken for a Chinese commit message
+#      - flag the message as Chinese if any Han character (\p{Han}) appears
+#
+# Bypass: use `git commit --no-verify` if you really need to.
+
+msg_file="$1"
+
+if perl -CSD -ne '
+    last if /^#.*>8/;          # verbose-diff scissors line; stop before the diff
+    next if /^#/;              # skip comment lines
+    if (/\p{Han}/) { exit 1 }  # found a Han character -> exit 1 (flagged)
+' "$msg_file"; then
+    exit 0   # perl finished normally (exit 0) = no Chinese -> allow
+fi
+
+# Reaching here means perl exited 1 = Chinese detected.
+cat >&2 <<'TIP'
+
+  x Commit blocked: the commit message contains Chinese (Han) characters.
+
+  This repo requires commit messages to be written in English
+  (Conventional Commits). Please rewrite it in English and commit again.
+
+  To bypass this check intentionally:  git commit --no-verify
+
+TIP
+exit 1
