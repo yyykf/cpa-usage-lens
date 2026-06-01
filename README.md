@@ -1,6 +1,6 @@
 # CPA Usage Lens
 
-[![Status](https://img.shields.io/badge/status-WIP-F59E0B?style=flat-square)](#)
+[![Release](https://img.shields.io/github/v/release/yyykf/cpa-usage-lens?style=flat-square&color=0d1117)](https://github.com/yyykf/cpa-usage-lens/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/yyykf/cpa-usage-lens/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/yyykf/cpa-usage-lens/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-0d1117?style=flat-square)](./LICENSE)
 
@@ -13,8 +13,6 @@
 [![Docker](https://img.shields.io/badge/Docker-0d1117?style=flat-square&logo=docker&logoColor=2496ED)](https://www.docker.com)
 
 **English** · [简体中文](./README.zh-CN.md)
-
-> ⚠️ **Work in progress** — under active development and not yet released to `main`. APIs, schema, and docs may still change.
 
 Account-level usage analytics for self-hosted **CLIProxyAPI (CPA)** users, with a **near-zero local footprint**. An external collector drains CPA's usage queue, writes slimmed-down data to **Supabase (cloud Postgres)**, and serves a **polished dark dashboard** showing per-account request counts, token usage, and estimated cost over any period.
 
