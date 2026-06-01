@@ -1,5 +1,5 @@
-# ---- 构建阶段 ----
-FROM node:20-alpine AS build
+# ---- 构建阶段（固定在 builder 原生架构跑，前端产物是架构无关的静态文件）----
+FROM --platform=$BUILDPLATFORM node:20-alpine AS build
 WORKDIR /app
 COPY package.json ./
 RUN npm install
