@@ -1,6 +1,6 @@
 # CPA Usage Lens
 
-[![Status](https://img.shields.io/badge/status-WIP-F59E0B?style=flat-square)](#)
+[![Release](https://img.shields.io/github/v/release/yyykf/cpa-usage-lens?style=flat-square&color=0d1117)](https://github.com/yyykf/cpa-usage-lens/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/yyykf/cpa-usage-lens/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/yyykf/cpa-usage-lens/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-0d1117?style=flat-square)](./LICENSE)
 
@@ -13,8 +13,6 @@
 [![Docker](https://img.shields.io/badge/Docker-0d1117?style=flat-square&logo=docker&logoColor=2496ED)](https://www.docker.com)
 
 [English](./README.md) · **简体中文**
-
-> ⚠️ **开发中（WIP）** —— 正在活跃开发，尚未发布到 `main`。API、表结构、文档都可能变动。
 
 为运行 CLIProxyAPI (CPA) 的小服务器用户，提供**不占用本地资源**的账号级用量分析：用外部采集器消费 CPA 用量队列，把精简数据写入 **Supabase 云数据库**，并提供一个**美观的暗色 Web 仪表盘**，随时查看每个账号在一段周期内的请求数、token 用量与估算成本。
 
