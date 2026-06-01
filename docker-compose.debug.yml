@@ -1,0 +1,16 @@
+# Optional debug override.
+#
+# Use only when you intentionally need direct backend access from the host:
+#
+#   CUL_VERSION=<latest-release-tag> docker compose \
+#     -f docker-compose.prod.yml \
+#     -f docker-compose.debug.yml \
+#     up -d
+#
+# Normal production deployments should expose only the frontend port. The
+# frontend container already proxies /api to the backend over the Compose
+# network, so publishing backend :8080 is not required for dashboard use.
+services:
+  backend:
+    ports:
+      - "8080:8080"
