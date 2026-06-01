@@ -34,6 +34,8 @@ split_commits = false
 commit_preprocessors = [
     # drop a trailing "[#AI]" marker if it ever lands in the subject line
     { pattern = '\s*\[#AI\]\s*', replace = "" },
+    # wrap "@word" in backticks so GitHub doesn't render it as a user mention (e.g. @theme)
+    { pattern = '@([a-zA-Z0-9_-]+)', replace = "`@${1}`" },
 ]
 # HTML-comment prefixes control group order; `striptags` in the template removes them.
 commit_parsers = [
