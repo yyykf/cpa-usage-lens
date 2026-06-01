@@ -1,10 +1,11 @@
-# ---- 构建阶段 ----
-FROM golang:1.26-alpine AS build
+# ---- 构建阶段（在 builder 原生架构上交叉编译到目标架构，避免 QEMU 模拟慢）----
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/server ./cmd/server
 
 # ---- 运行阶段 ----
 FROM alpine:3.20
