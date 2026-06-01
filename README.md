@@ -18,6 +18,14 @@ Account-level usage analytics for self-hosted **CLIProxyAPI (CPA)** users, with 
 
 > **What's different:** the data lives in Supabase cloud and the local footprint is near-zero — most similar tools keep everything in a local SQLite file.
 
+![CPA Usage Lens product overview](docs/assets/product-intro.png)
+
+> Concept preview: this generated image shows the intended visual direction, not an exact screenshot of the current UI. The redacted screenshot below is the current product.
+
+## Product Preview
+
+![CPA Usage Lens real dashboard screenshot with account details redacted](docs/assets/dashboard-screenshot.jpg)
+
 ## Features
 
 - 📊 **Dark Bento dashboard** — period overview · per-account leaderboard · daily trend · collector health
@@ -47,9 +55,14 @@ Full guide: **[docs/deployment.md](docs/deployment.md)**. In three steps:
 
 1. **Create the tables** in Supabase (`supabase db push`, or run `supabase/migrations/` in the SQL Editor)
 2. **Copy `.env.example` to `.env`** and fill it in (CPA URL/key, Supabase connection string, dashboard password)
-3. **`docker compose up -d --build`** → open `http://<server>:8088`
+3. **Use the latest release tag** and start the pre-built images → open `http://<server>:8088`
 
-> 💡 Don't want to build locally? Run the pre-built GHCR images instead — `CUL_VERSION=v0.1.0 docker compose -f docker-compose.prod.yml up -d`. See [deployment](docs/deployment.md).
+```bash
+export CUL_VERSION=<latest-release-tag>
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Use the latest tag from [GitHub Releases](https://github.com/yyykf/cpa-usage-lens/releases). See [deployment](docs/deployment.md) for the no-source-checkout path and the optional backend debug override.
 
 > ⚠️ CPA must have `usage-statistics-enabled: true`, and **only one** collector may run against a given CPA queue. See [Important constraints](#important-constraints).
 

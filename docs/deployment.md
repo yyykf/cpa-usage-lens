@@ -66,11 +66,35 @@ Two ways — pick one.
 
 ### Option A — Pre-built images (recommended, no build)
 
-Pull the published images from GHCR and run them directly. The server only needs `.env` and `docker-compose.prod.yml` (no source checkout):
+Pull the published images from GHCR and run them directly. Use the latest release tag from [GitHub Releases](https://github.com/yyykf/cpa-usage-lens/releases); pinning a tag makes rollback predictable.
+
+#### No source checkout
+
+The normal production run only needs `.env` and `docker-compose.prod.yml`; the debug override is downloaded as a convenience for later troubleshooting. The Compose templates are fetched from `main`, while the images are pinned by `CUL_VERSION` to the latest release tag.
 
 ```bash
-# CUL_VERSION selects the release tag; omit it to use :latest
-CUL_VERSION=v0.1.0 docker compose -f docker-compose.prod.yml up -d
+mkdir -p cpa-usage-lens
+cd cpa-usage-lens
+
+# Replace this with the latest release tag, for example v0.1.1 or newer.
+export CUL_VERSION=<latest-release-tag>
+
+curl -fsSLO "https://raw.githubusercontent.com/yyykf/cpa-usage-lens/main/docker-compose.prod.yml"
+curl -fsSLO "https://raw.githubusercontent.com/yyykf/cpa-usage-lens/main/docker-compose.debug.yml"
+curl -fsSLO "https://raw.githubusercontent.com/yyykf/cpa-usage-lens/main/.env.example"
+cp .env.example .env
+
+# Fill in CPA_BASE_URL, CPA_MANAGEMENT_KEY, DATABASE_URL, DASHBOARD_PASSWORD, AUTH_TOKEN_SECRET.
+nano .env
+
+docker compose -f docker-compose.prod.yml up -d
+```
+
+#### Existing source checkout
+
+```bash
+export CUL_VERSION=<latest-release-tag>
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 Images are published to GHCR automatically on every `v*` release tag (see [the Release workflow](../.github/workflows/release.yml)).
@@ -84,11 +108,50 @@ docker compose up -d --build
 Either way:
 
 - Frontend: open `http://<server-ip>:8088`
-- Backend: `:8080` (optional, debug only; you can drop the port mapping in production and let the frontend nginx reach it over the internal network)
+- Backend: not exposed by default. This is intentional: the frontend nginx reaches `backend:8080` over the internal Compose network, so normal users only need to expose the dashboard port.
+
+If you intentionally need direct backend access for debugging:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.debug.yml up -d
+curl http://<server-ip>:8080/healthz
+```
 
 ---
 
-## 5. Critical constraints & data-loss risks (must read)
+## 5. Verify deployment
+
+Run these checks after starting the stack:
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=100 backend
+docker compose -f docker-compose.prod.yml exec -T backend wget -qO- http://127.0.0.1:8080/healthz
+```
+
+Expected results:
+
+- `backend` and `frontend` are both `running` or `up`.
+- `/healthz` prints `ok`.
+- `http://<server-ip>:8088` shows the login page.
+- After login, the collector card should show recent polling. If CPA has live traffic, `events_ingested` should increase.
+
+---
+
+## 6. Troubleshooting
+
+| Symptom | What to check | Why |
+|---------|---------------|-----|
+| Login page does not open | `docker compose ps`, server firewall, cloud security group, and whether port `8088` is published | Only the frontend port is exposed in production |
+| Backend health fails | `docker compose logs backend`, `DATABASE_URL`, and whether the Supabase migration was run | The backend exits if required config or DB access is invalid |
+| Login password does not work | Update `DASHBOARD_PASSWORD` in `.env`, then restart with `docker compose -f docker-compose.prod.yml up -d` | The password is read from environment at backend startup |
+| Collector shows no new events | CPA `usage-statistics-enabled`, `remote-management.secret-key`, `redis-usage-queue-retention-seconds`, and backend logs | CPA only publishes queue events when the management queue is enabled |
+| Data is split or missing | Make sure only one instance has `COLLECTOR_ENABLED=true` for this CPA queue | The CPA usage queue is destructive pop-on-read |
+| Cost shows unknown | Click refresh prices and check outbound access to GitHub raw content | Prices are fetched from the LiteLLM price table |
+
+---
+
+## 7. Critical constraints & data-loss risks (must read)
 
 1. **Globally single collector** — only **one** instance of this tool may run against a given CPA queue. The queue has pop (take-and-delete) semantics; multiple instances steal each other's data.
 2. **Pop is not replayable** — requests produced while the collector is down for **longer than `redis-usage-queue-retention-seconds`** (default 60s, recommend 3600s) are **lost permanently**: CPA's queue is purely in-memory, never persisted, and cleared on expiry.
@@ -98,7 +161,7 @@ Either way:
 
 ---
 
-## 6. Read-only instance / iterative validation (`COLLECTOR_ENABLED`)
+## 8. Read-only instance / iterative validation (`COLLECTOR_ENABLED`)
 
 The backend is a single process that by default runs everything at once: the background collector loop + rollup/cleanup scheduler + price refresh + query API. But the CPA queue is **pop-to-delete** and **only one collector may run globally** (constraint 1 above) — so you **cannot** simply spin up a second instance for validation (it would steal the queue and also trigger rollup/cleanup writes).
 
@@ -115,7 +178,7 @@ Use case: during iteration/debugging (e.g. validating the frontend or a new quer
 
 ---
 
-## 7. Capacity assumptions
+## 9. Capacity assumptions
 
 - **Bounded detail** — size ≈ retention days × daily request volume (default 7 days); it has a ceiling and does **not** grow unbounded over time.
 - **Tiny aggregates** — each `daily_account_usage` row is small and grows by account × model × day, slowly.
@@ -124,7 +187,7 @@ Use case: during iteration/debugging (e.g. validating the frontend or a new quer
 
 ---
 
-## 8. Cost estimation
+## 10. Cost estimation
 
 - Uses the **LiteLLM price table** (`model_prices_and_context_window.json` from `BerriAI/litellm`).
 - **Query-time calculation**: cost = tokens × current unit price; cost is never stored in the DB. Change a price and historical data automatically reflects it — no backfill.
@@ -133,7 +196,7 @@ Use case: during iteration/debugging (e.g. validating the frontend or a new quer
 
 ---
 
-## 9. Shutdown & rollback
+## 11. Shutdown & rollback
 
 - Collector interruption/restart: the disk buffer auto-recovers; but data lost during downtime exceeding retention can't be recovered (see risk 2).
 - Queue backlog: under normal load, `count=200` + 3s polling is enough to keep up; if the backlog is severe, temporarily raise `COLLECTOR_BATCH_SIZE`.
@@ -203,11 +266,35 @@ supabase db push --db-url "<Session pooler 连接串>"
 
 ### 方式 A —— 用预构建镜像（推荐，免构建）
 
-从 GHCR 拉取已发布的镜像直接运行。服务器上只需要 `.env` 和 `docker-compose.prod.yml`（无需 clone 源码）：
+从 GHCR 拉取已发布的镜像直接运行。请使用 [GitHub Releases](https://github.com/yyykf/cpa-usage-lens/releases) 里的最新发布 tag；固定 tag 部署比直接用浮动 `latest` 更便于回滚。
+
+#### 不 clone 源码部署
+
+生产正常运行只需要 `.env` 和 `docker-compose.prod.yml`；这里顺手下载调试 override，方便后续排障时使用。Compose 模板从 `main` 获取，实际运行的镜像版本仍由 `CUL_VERSION` 固定到最新发布 tag。
 
 ```bash
-# CUL_VERSION 指定发布版本号；省略则用 :latest
-CUL_VERSION=v0.1.0 docker compose -f docker-compose.prod.yml up -d
+mkdir -p cpa-usage-lens
+cd cpa-usage-lens
+
+# 换成当前最新发布 tag，例如 v0.1.1 或更新版本。
+export CUL_VERSION=<latest-release-tag>
+
+curl -fsSLO "https://raw.githubusercontent.com/yyykf/cpa-usage-lens/main/docker-compose.prod.yml"
+curl -fsSLO "https://raw.githubusercontent.com/yyykf/cpa-usage-lens/main/docker-compose.debug.yml"
+curl -fsSLO "https://raw.githubusercontent.com/yyykf/cpa-usage-lens/main/.env.example"
+cp .env.example .env
+
+# 填写 CPA_BASE_URL、CPA_MANAGEMENT_KEY、DATABASE_URL、DASHBOARD_PASSWORD、AUTH_TOKEN_SECRET。
+nano .env
+
+docker compose -f docker-compose.prod.yml up -d
+```
+
+#### 已经 clone 源码
+
+```bash
+export CUL_VERSION=<latest-release-tag>
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 镜像在每次 `v*` 发布 tag 时自动推送到 GHCR（见 [Release workflow](../.github/workflows/release.yml)）。
@@ -221,11 +308,50 @@ docker compose up -d --build
 两种方式部署后：
 
 - 前端：浏览器访问 `http://<服务器IP>:8088`
-- 后端：`:8080`（可选，仅调试用；生产可在 compose 去掉端口映射，仅由 frontend nginx 内网访问）
+- 后端：默认不暴露到宿主机。这是刻意的生产默认值：frontend nginx 会在 Compose 内网访问 `backend:8080`，普通使用者只需要暴露 dashboard 端口。
+
+如确实需要直连 backend 做调试：
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.debug.yml up -d
+curl http://<服务器IP>:8080/healthz
+```
 
 ---
 
-## 五、⚠️ 关键约束与丢数据风险（务必阅读）
+## 五、部署后检查
+
+启动后先跑这几条：
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=100 backend
+docker compose -f docker-compose.prod.yml exec -T backend wget -qO- http://127.0.0.1:8080/healthz
+```
+
+正常结果：
+
+- `backend` 和 `frontend` 都是 `running` / `up`。
+- `/healthz` 输出 `ok`。
+- 浏览器打开 `http://<服务器IP>:8088` 能看到登录页。
+- 登录后，采集器卡片应显示最近轮询；如果 CPA 有真实流量，`events_ingested` 应该增长。
+
+---
+
+## 六、常见问题排查
+
+| 现象 | 检查项 | 原因 |
+|------|--------|------|
+| 登录页打不开 | `docker compose ps`、服务器防火墙、云厂商安全组、`8088` 是否暴露 | 生产默认只暴露 frontend 端口 |
+| backend health 失败 | `docker compose logs backend`、`DATABASE_URL`、Supabase migration 是否执行 | 必填配置或数据库连接错误会导致 backend 退出 |
+| 登录密码不生效 | 修改 `.env` 的 `DASHBOARD_PASSWORD` 后执行 `docker compose -f docker-compose.prod.yml up -d` 重启 | 登录密码在 backend 启动时读取 |
+| 采集器没有新数据 | CPA 的 `usage-statistics-enabled`、`remote-management.secret-key`、`redis-usage-queue-retention-seconds`、backend 日志 | CPA 只有启用 management queue 后才会发布用量事件 |
+| 数据缺失或被拆散 | 确保同一个 CPA 队列只有一个实例 `COLLECTOR_ENABLED=true` | CPA usage queue 是 pop 即删，多采集器会互相抢数据 |
+| 成本显示未知 | 点击刷新价格表，并确认容器能访问 GitHub raw 内容 | 价格来自 LiteLLM price table |
+
+---
+
+## 七、⚠️ 关键约束与丢数据风险（务必阅读）
 
 1. **全局单采集器**：同一个 CPA 队列**只能跑一个**本工具实例。队列是 pop（取走即删）语义，多实例会互相抢走对方的数据。
 2. **pop 不可回放**：采集器停机**超过 `redis-usage-queue-retention-seconds`**（默认 60s，建议 3600s）期间产生的请求，会**永久丢失**——CPA 队列纯内存、不落盘，过期即清。
@@ -235,7 +361,7 @@ docker compose up -d --build
 
 ---
 
-## 六、只读实例 / 迭代验证（`COLLECTOR_ENABLED`）
+## 八、只读实例 / 迭代验证（`COLLECTOR_ENABLED`）
 
 backend 是单进程，默认同时跑：后台采集循环 + rollup/清理调度 + 价格刷新 + 查询 API。但 CPA 队列是 **pop 即删** 且**全局只能跑一个采集器**（见上节约束 1）——所以**不能**简单地再起第二个实例来做验证（会抢队列、还会触发 rollup/清理写库）。
 
@@ -252,7 +378,7 @@ backend 是单进程，默认同时跑：后台采集循环 + rollup/清理调�
 
 ---
 
-## 七、容量假设
+## 九、容量假设
 
 - **明细有界**：体积 ≈ 保留天数 × 日请求量（默认 7 天），**有上限、不随时间无限增长**。
 - **聚合极小**：`daily_account_usage` 每行很小，按 账号×模型×天 增长，缓慢。
@@ -261,7 +387,7 @@ backend 是单进程，默认同时跑：后台采集循环 + rollup/清理调�
 
 ---
 
-## 八、成本估算
+## 十、成本估算
 
 - 用 **LiteLLM 价格表**（`BerriAI/litellm` 的 `model_prices_and_context_window.json`）。
 - **query-time 计算**：成本 = token × 当前单价，不在库里存死 cost；改了价格历史数据自动按新价显示，无需回填。
@@ -270,7 +396,7 @@ backend 是单进程，默认同时跑：后台采集循环 + rollup/清理调�
 
 ---
 
-## 九、停机与回滚
+## 十一、停机与回滚
 
 - 采集器中断重启：自动恢复落盘缓冲；但停机超 retention 的数据无法补回（见风险 2）。
 - 队列堆积：正常负载下 `count=200` + 3s 轮询足以追上；积压严重时可临时调大 `COLLECTOR_BATCH_SIZE`。
