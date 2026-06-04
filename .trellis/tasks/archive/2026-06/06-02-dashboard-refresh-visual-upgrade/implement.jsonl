@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端规范入口，含 Pre-Development Checklist，先读它再按需补读"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "需在 queries.go 新增「上一等长周期」聚合与「模型总量」聚合查询"}
+{"file": ".trellis/spec/backend/cost-calculation.md", "reason": "模型排行「按成本」口径需复用 model_prices 实时计算"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "handlers.go 新增/扩展 endpoint 的错误处理约定"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范入口，含 Pre-Development Checklist，先读它再按需补读"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "新增自动刷新选择器、模型排行视图，改 LivePulse/StatRail 等组件"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "自动刷新用 setInterval 轮询，需正确的副作用与卸载清理"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "刷新档位状态、localStorage 记忆偏好、口径切换状态"}
+{"file": ".trellis/spec/frontend/styling-guidelines.md", "reason": "沿用碳黑+青绿配色、收敛辉光、避免 AI 味的样式约束"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "KPI 环比/模型排行数据从 DB→handler→前端跨层流动，需统一契约"}

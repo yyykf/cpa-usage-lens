@@ -23,8 +23,9 @@ backend/bin/
 # Removed local preview sandbox (kept ignored to avoid accidental re-add)
 local-preview/
 
-# Playwright / E2E 临时产物
+# Playwright / E2E 临时产物（本地验证截图/快照，不入库）
 .playwright-cli/
+/e2e/
 /dashboard.yaml
 /dashboard-e2e.png
 

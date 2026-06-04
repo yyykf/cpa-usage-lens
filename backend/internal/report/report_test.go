@@ -94,7 +94,7 @@ func TestBuildModelBreakdown(t *testing.T) {
 		{UsageDate: d1, Source: "a@x.com", Model: "claude", Tokens: model.Tokens{Total: 200}},
 		{UsageDate: d2, Source: "a@x.com", Model: "gemini", Tokens: model.Tokens{Total: 400}},
 	}
-	mb := BuildModelBreakdown(rows)
+	mb := BuildModelBreakdown(rows, nil, "")
 
 	// Models 按周期总 token 降序：gpt(1100) > gemini(400) > claude(200)
 	if got := mb.Models; len(got) != 3 || got[0] != "gpt" || got[1] != "gemini" || got[2] != "claude" {
@@ -126,6 +126,104 @@ func TestBuildModelBreakdown(t *testing.T) {
 	}
 }
 
+// 环比块：有数据时汇总四个 KPI 维度；成本沿用"缺价即未知"。
+func TestBuildOverviewCompare(t *testing.T) {
+	cmp := BuildOverviewCompare(sampleRows(), prices())
+	if cmp == nil {
+		t.Fatal("compare should be non-nil when rows present")
+	}
+	if cmp.Requests != 35 || cmp.Tokens != 3500 || cmp.Failed != 3 {
+		t.Errorf("compare totals wrong: %+v", cmp)
+	}
+	if cmp.Cost == nil {
+		t.Error("compare cost should be known")
+	}
+}
+
+// 上一周期完全无数据 → 返回 nil（前端据此置 HasPrevious=false，不展示百分比）。
+func TestBuildOverviewCompare_EmptyMeansNil(t *testing.T) {
+	if cmp := BuildOverviewCompare(nil, prices()); cmp != nil {
+		t.Errorf("empty rows should yield nil compare, got %+v", cmp)
+	}
+	if cmp := BuildOverviewCompare([]model.DailyUsage{}, prices()); cmp != nil {
+		t.Errorf("empty slice should yield nil compare, got %+v", cmp)
+	}
+}
+
+// 上一周期有数据但缺价 → 块非 nil（有可比基准），但 Cost 为 nil（成本未知）。
+func TestBuildOverviewCompare_MissingPriceUnknownCost(t *testing.T) {
+	cmp := BuildOverviewCompare(sampleRows(), map[string]model.ModelPrice{})
+	if cmp == nil {
+		t.Fatal("compare should be non-nil even when prices missing")
+	}
+	if cmp.Cost != nil {
+		t.Error("compare cost should be unknown when prices missing")
+	}
+	if cmp.Requests != 35 {
+		t.Error("requests should still aggregate even without prices")
+	}
+}
+
+// 默认（空 metric）按 token 降序，Ranking 与 Models 顺序一致，且每项 token/cost 双值。
+func TestBuildModelBreakdown_RankingDefaultToken(t *testing.T) {
+	mb := BuildModelBreakdown(sampleRows(), prices(), "")
+	if mb.Metric != "token" {
+		t.Errorf("default metric should normalize to token, got %q", mb.Metric)
+	}
+	// gpt-5.4 总 3000 token > claude 500 token
+	if len(mb.Ranking) != 2 || mb.Ranking[0].Model != "gpt-5.4" || mb.Ranking[1].Model != "claude" {
+		t.Fatalf("ranking token order wrong: %+v", mb.Ranking)
+	}
+	if mb.Ranking[0].Tokens != 3000 || mb.Ranking[1].Tokens != 500 {
+		t.Errorf("ranking tokens wrong: %+v", mb.Ranking)
+	}
+	if mb.Ranking[0].Cost == nil || mb.Ranking[1].Cost == nil {
+		t.Error("ranking cost should be present when priced")
+	}
+}
+
+// cost 口径按成本降序：claude 单价更高，总成本可超过 token 更多的 gpt。
+func TestBuildModelBreakdown_RankingByCost(t *testing.T) {
+	d := time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)
+	// gpt: 1000 token 全 input @1e-6 = 0.001；claude: 500 input @3e-6 = 0.0015 → claude 成本更高
+	rows := []model.DailyUsage{
+		{UsageDate: d, Source: "a", Model: "gpt-5.4", Requests: 1, Tokens: model.Tokens{Total: 1000, Input: 1000}},
+		{UsageDate: d, Source: "a", Model: "claude", Requests: 1, Tokens: model.Tokens{Total: 500, Input: 500}},
+	}
+	mb := BuildModelBreakdown(rows, prices(), "cost")
+	if mb.Metric != "cost" {
+		t.Errorf("metric should be cost, got %q", mb.Metric)
+	}
+	// 成本降序：claude(0.0015) > gpt(0.001)，尽管 gpt 的 token 更多
+	if mb.Ranking[0].Model != "claude" || mb.Ranking[1].Model != "gpt-5.4" {
+		t.Fatalf("ranking cost order wrong: %+v", mb.Ranking)
+	}
+}
+
+// cost 口径下缺价模型(cost=nil)排到末尾，已知成本者在前。
+func TestBuildModelBreakdown_RankingCostMissingPriceLast(t *testing.T) {
+	d := time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{
+		{UsageDate: d, Source: "a", Model: "noprice", Tokens: model.Tokens{Total: 9999, Input: 9999}}, // 无价格
+		{UsageDate: d, Source: "a", Model: "gpt-5.4", Tokens: model.Tokens{Total: 100, Input: 100}},   // 有价格
+	}
+	mb := BuildModelBreakdown(rows, prices(), "cost")
+	if mb.Ranking[0].Model != "gpt-5.4" {
+		t.Fatalf("priced model should rank before unpriced under cost: %+v", mb.Ranking)
+	}
+	if mb.Ranking[1].Model != "noprice" || mb.Ranking[1].Cost != nil {
+		t.Errorf("unpriced model should be last with nil cost: %+v", mb.Ranking)
+	}
+}
+
+// 未知 metric 归一化为 token（默认口径），不报错。
+func TestBuildModelBreakdown_UnknownMetricFallsBackToToken(t *testing.T) {
+	mb := BuildModelBreakdown(sampleRows(), prices(), "garbage")
+	if mb.Metric != "token" {
+		t.Errorf("unknown metric should fall back to token, got %q", mb.Metric)
+	}
+}
+
 // 总 token 相同的模型按名字典序排序，保证输出确定性。
 func TestBuildModelBreakdown_TieBrokenByName(t *testing.T) {
 	d := time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)
@@ -133,7 +231,7 @@ func TestBuildModelBreakdown_TieBrokenByName(t *testing.T) {
 		{UsageDate: d, Source: "a@x.com", Model: "zeta", Tokens: model.Tokens{Total: 100}},
 		{UsageDate: d, Source: "a@x.com", Model: "alpha", Tokens: model.Tokens{Total: 100}},
 	}
-	mb := BuildModelBreakdown(rows)
+	mb := BuildModelBreakdown(rows, nil, "")
 	if len(mb.Models) != 2 || mb.Models[0] != "alpha" || mb.Models[1] != "zeta" {
 		t.Errorf("tie should break by name asc: %v", mb.Models)
 	}

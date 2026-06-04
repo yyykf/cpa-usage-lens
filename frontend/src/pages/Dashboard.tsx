@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { LogOut } from 'lucide-react'
 import { toast } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -10,10 +10,12 @@ import StatRail from '../components/dashboard/StatRail'
 import TokenComposition from '../components/dashboard/TokenComposition'
 import TrendChart from '../components/TrendChart'
 import CollectorHealthCard from '../components/CollectorHealth'
-import ModelStackChart from '../components/ModelStackChart'
+import ModelUsagePanel from '../components/ModelUsagePanel'
 import AccountTable from '../components/AccountTable'
 import { LiveBadge } from '../components/dashboard/LivePulse'
+import RefreshSelector from '../components/dashboard/RefreshSelector'
 import { Kicker } from '../components/dashboard/Primitives'
+import { useAutoRefresh, refreshLabel } from '../hooks/useAutoRefresh'
 import {
   getOverview,
   getAccounts,
@@ -45,9 +47,11 @@ const EMPTY_OVERVIEW: Overview = {
   cachedTokens: 0,
   cacheReadTokens: 0,
   cacheCreationTokens: 0,
+  hasPrevious: false,
+  previous: null,
 }
 
-const EMPTY_MODELS: ModelBreakdown = { models: [], daily: [] }
+const EMPTY_MODELS: ModelBreakdown = { models: [], daily: [], metric: 'token', ranking: [] }
 
 const EMPTY_COLLECTOR: CollectorHealthData = {
   status: 'error',
@@ -77,32 +81,72 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [collector, setCollector] = useState<CollectorHealthData | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
 
-  const loadData = useCallback(async (): Promise<void> => {
-    try {
-      setLoading(true)
-      const q = periodQuery(period, custom ?? undefined)
-      const [o, a, t, m, c] = await Promise.all([
-        getOverview(q),
-        getAccounts(q),
-        getTrend(q),
-        getModels(q),
-        getCollector(),
-      ])
-      setOverview(o)
-      setAccounts(a)
-      setTrend(t)
-      setModels(m)
-      setCollector(c)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '加载失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [period, custom])
+  // 请求序号：每次 loadData 自增，回包后只有仍是最新序号才 setState。
+  // 防止慢的旧响应覆盖新数据（切周期瞬间闪旧数据、或多轮轮询重叠时的根因）。
+  const reqIdRef = useRef(0)
+  // 轮询 in-flight 锁：仅约束自动刷新（silent），上一轮没结束就跳过本 tick、不堆积。
+  const inFlightRef = useRef(false)
+  // silent 失败去重：记上一次 silent 是否已处于失败态，避免 API 临时挂时每 tick 刷屏。
+  const silentErroredRef = useRef(false)
+
+  // silent: 自动刷新轮询时为 true，不触发骨架屏（避免每隔几秒全屏闪一下），仅静默替换数据。
+  const loadData = useCallback(
+    async (silent = false): Promise<void> => {
+      // 自动刷新：上一轮还没回来就跳过本轮，避免慢网络/5s 档多轮重叠。
+      // 手动操作（非 silent）不受此锁约束——用户主动刷新优先。
+      if (silent && inFlightRef.current) return
+
+      const reqId = ++reqIdRef.current
+      // 锁只服务于 silent 的「跳过重叠轮询」，故只由 silent 路径置位/复位；
+      // 手动请求不碰它，避免手动在途时错误复位、削弱后续轮询的跳过判断。
+      if (silent) inFlightRef.current = true
+      try {
+        if (!silent) setLoading(true)
+        const q = periodQuery(period, custom ?? undefined)
+        const [o, a, t, m, c] = await Promise.all([
+          getOverview(q),
+          getAccounts(q),
+          getTrend(q),
+          getModels(q),
+          getCollector(),
+        ])
+        // 仅当本次仍是最新请求时才落数据：更晚发起的请求（如切周期）已赢，丢弃旧结果。
+        if (reqId !== reqIdRef.current) return
+        setOverview(o)
+        setAccounts(a)
+        setTrend(t)
+        setModels(m)
+        setCollector(c)
+        silentErroredRef.current = false
+      } catch (e) {
+        // 旧请求的失败也不该打扰用户（已有更新的请求在途）。
+        if (reqId !== reqIdRef.current) return
+        // silent 失败去重：仅在「上一轮还正常、这轮首次转失败」时弹一次；
+        // 持续失败不重复弹，恢复成功后复位，下次再失败可再提示。
+        if (silent) {
+          if (!silentErroredRef.current) {
+            silentErroredRef.current = true
+            toast.error(e instanceof Error ? e.message : '自动刷新失败')
+          }
+        } else {
+          toast.error(e instanceof Error ? e.message : '加载失败')
+        }
+      } finally {
+        if (silent) inFlightRef.current = false
+        if (!silent) setLoading(false)
+      }
+    },
+    [period, custom],
+  )
 
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  // 自动刷新：按选中档位静默重拉全部数据（复用 loadData），切换/卸载自动清理定时器。
+  const { interval: refreshInterval, setInterval: setRefreshInterval } = useAutoRefresh(() => {
+    void loadData(true)
+  })
 
   const handlePeriodChange = (next: Period, range?: CustomRange) => {
     setCustom(range ?? null)
@@ -144,11 +188,12 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
                 <h1 className="font-mono text-[15px] font-semibold uppercase tracking-[0.14em] text-foreground">CPA Usage Lens</h1>
                 <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-faint">Usage · Cost · Models</div>
               </div>
-              <LiveBadge />
+              <LiveBadge active={refreshInterval !== 0} intervalLabel={refreshLabel(refreshInterval)} />
             </div>
 
             <div className="flex items-center gap-3">
               <PeriodSwitcher period={period} custom={custom} onChange={handlePeriodChange} />
+              <RefreshSelector value={refreshInterval} onChange={setRefreshInterval} />
               <Button type="button" variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="size-4" />
                 退出
@@ -176,8 +221,9 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
             </div>
           </div>
 
+          <Kicker>02 — 模型用量 · {periodSubtitle}</Kicker>
           <div className="mb-3.5">
-            <ModelStackChart data={models} loading={loading} />
+            <ModelUsagePanel data={models} loading={loading} />
           </div>
 
           <AccountTable accounts={accounts} loading={loading} />

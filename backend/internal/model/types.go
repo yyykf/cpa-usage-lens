@@ -73,17 +73,32 @@ type CollectorState struct {
 
 // Overview 顶部总览（周期内汇总）。Cost 为 nil 表示存在缺价模型 → 前端显示"未知"。
 // 在总 token 之外额外透出 token 拆分，供前端做拆分维度可视化。
+// Previous 为与本周期紧邻且等长的上一周期汇总，供 KPI 环比角标使用；
+// HasPrevious=false 表示上一周期完全无数据（无可比基准，前端不应展示百分比，
+// 区别于"上一周期有数据但某指标为 0"）。后端只下发两段绝对值，
+// 不在后端算百分比——避免除 0 得 ↑∞，具体兜底呈现由前端按设计稿决定。
 type Overview struct {
-	Requests            int64    `json:"requests"`
-	Tokens              int64    `json:"tokens"`
-	Cost                *float64 `json:"cost"`
-	Failed              int64    `json:"failed"`
-	InputTokens         int64    `json:"inputTokens"`
-	OutputTokens        int64    `json:"outputTokens"`
-	ReasoningTokens     int64    `json:"reasoningTokens"`
-	CachedTokens        int64    `json:"cachedTokens"`
-	CacheReadTokens     int64    `json:"cacheReadTokens"`
-	CacheCreationTokens int64    `json:"cacheCreationTokens"`
+	Requests            int64            `json:"requests"`
+	Tokens              int64            `json:"tokens"`
+	Cost                *float64         `json:"cost"`
+	Failed              int64            `json:"failed"`
+	InputTokens         int64            `json:"inputTokens"`
+	OutputTokens        int64            `json:"outputTokens"`
+	ReasoningTokens     int64            `json:"reasoningTokens"`
+	CachedTokens        int64            `json:"cachedTokens"`
+	CacheReadTokens     int64            `json:"cacheReadTokens"`
+	CacheCreationTokens int64            `json:"cacheCreationTokens"`
+	HasPrevious         bool             `json:"hasPrevious"`
+	Previous            *OverviewCompare `json:"previous"`
+}
+
+// OverviewCompare 上一等长周期的可比指标（仅四个 KPI 维度，不含 token 拆分）。
+// Cost 为 nil 表示上一周期成本未知（缺价模型）→ 前端对成本环比走"未知"兜底。
+type OverviewCompare struct {
+	Requests int64    `json:"requests"`
+	Tokens   int64    `json:"tokens"`
+	Cost     *float64 `json:"cost"`
+	Failed   int64    `json:"failed"`
 }
 
 // AccountUsage 账号用量榜一行（核心模块）。同样透出 token 拆分。
@@ -122,10 +137,22 @@ type CollectorHealth struct {
 	DailyBytes     int64      `json:"dailyBytes"`
 }
 
-// ModelBreakdown 模型用量分布（前端「每日 100% 堆叠柱」用）。
+// ModelBreakdown 模型用量分布。
+// Models/Daily 给前端「每日 100% 堆叠柱」；Ranking 给「模型总量排行」（水平条形）。
 type ModelBreakdown struct {
-	Models []string          `json:"models"` // 周期内出现过的模型，按总 token 降序（决定堆叠顺序/图例/配色索引）
-	Daily  []ModelDailyPoint `json:"daily"`  // 每天一项，日期升序
+	Models  []string          `json:"models"`  // 周期内出现过的模型，按总 token 降序（决定堆叠顺序/图例/配色索引）
+	Daily   []ModelDailyPoint `json:"daily"`   // 每天一项，日期升序
+	Ranking []ModelRankItem   `json:"ranking"` // 周期内各模型总量排行，按当前口径(metric)降序
+	Metric  string            `json:"metric"`  // 本次排行口径："token" | "cost"（决定 Ranking 的排序依据）
+}
+
+// ModelRankItem 模型总量排行的一项。
+// Tokens 始终给（周期内该模型总 token）；Cost 为 nil 表示该模型缺价 → 成本未知。
+// 两个口径的值都返回，前端切换 token/cost 仅改排序与展示，无需二次请求。
+type ModelRankItem struct {
+	Model  string   `json:"model"`
+	Tokens int64    `json:"tokens"`
+	Cost   *float64 `json:"cost"`
 }
 
 // ModelDailyPoint 模型分布的某一天（按模型透视的 token）。

@@ -8,6 +8,7 @@ import (
 
 	"github.com/code4j/cpa-usage-lens/backend/internal/model"
 	"github.com/code4j/cpa-usage-lens/backend/internal/report"
+	"github.com/code4j/cpa-usage-lens/backend/internal/timeutil"
 )
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -31,11 +32,28 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
-	rows, ok := s.queryRange(w, r)
+	start, end, ok := s.resolveRangeOrFail(w, r)
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, report.BuildOverview(rows, s.prices.Prices()))
+	rows, ok := s.queryDaily(w, r, start, end)
+	if !ok {
+		return
+	}
+	prices := s.prices.Prices()
+	ov := report.BuildOverview(rows, prices)
+
+	// 环比：查与本周期紧邻且等长的上一区间，汇总成可比块。
+	prevStart, prevEnd := timeutil.PreviousRange(start, end)
+	prevRows, ok := s.queryDaily(w, r, prevStart, prevEnd)
+	if !ok {
+		return
+	}
+	if cmp := report.BuildOverviewCompare(prevRows, prices); cmp != nil {
+		ov.HasPrevious = true
+		ov.Previous = cmp
+	}
+	writeJSON(w, http.StatusOK, ov)
 }
 
 func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
@@ -54,23 +72,41 @@ func (s *Server) handleTrend(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report.BuildTrend(rows, s.prices.Prices()))
 }
 
-// handleModels 返回模型用量分布（按 token，不涉及成本，故无需价格表）。
+// handleModels 返回模型用量分布（每日堆叠柱 + 模型总量排行）。
+// query 参数 metric=token|cost 决定排行口径（默认 token）；cost 口径用价格表实时算。
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	rows, ok := s.queryRange(w, r)
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, report.BuildModelBreakdown(rows))
+	metric := r.URL.Query().Get("metric") // 归一化在 report.BuildModelBreakdown 内（非 cost 即 token）
+	writeJSON(w, http.StatusOK, report.BuildModelBreakdown(rows, s.prices.Prices(), metric))
 }
 
-// queryRange 解析周期并查聚合行；出错时已写响应并返回 ok=false。
+// queryRange 解析周期并查当前周期聚合行；出错时已写响应并返回 ok=false。
+// accounts/trend/models 只需当前周期；overview 因需环比，改用 resolveRangeOrFail + queryDaily。
 func (s *Server) queryRange(w http.ResponseWriter, r *http.Request) ([]model.DailyUsage, bool) {
+	start, end, ok := s.resolveRangeOrFail(w, r)
+	if !ok {
+		return nil, false
+	}
+	return s.queryDaily(w, r, start, end)
+}
+
+// resolveRangeOrFail 解析周期为 [start, end)；解析失败时已写 400 响应并返回 ok=false。
+func (s *Server) resolveRangeOrFail(w http.ResponseWriter, r *http.Request) (start, end time.Time, ok bool) {
 	start, end, err := s.resolveRange(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "无效周期参数"})
-		return nil, false
+		return time.Time{}, time.Time{}, false
 	}
-	rows, err := s.store.QueryDailyUsage(r.Context(), start, end)
+	return start, end, true
+}
+
+// queryDaily 查 [start, end) 区间聚合行（time.Time 转为按时区的 YYYY-MM-DD）；
+// 出错时已写响应并返回 ok=false。
+func (s *Server) queryDaily(w http.ResponseWriter, r *http.Request, start, end time.Time) ([]model.DailyUsage, bool) {
+	rows, err := s.store.QueryDailyUsage(r.Context(), timeutil.DateString(start, s.loc), timeutil.DateString(end, s.loc))
 	if err != nil {
 		log.Printf("查询用量失败: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "查询失败"})

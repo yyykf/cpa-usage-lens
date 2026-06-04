@@ -23,12 +23,21 @@ export function PulseDot({
   )
 }
 
-// 顶栏"采集中"呼吸徽标。
-export function LiveBadge({ label = '采集中' }: { label?: string }) {
+// 顶栏自动刷新状态徽标。
+// 只表达"前端是否在自动刷新"（开启=绿点脉冲+档位，关闭=灰点静止）；
+// 真实采集健康交给底部 CollectorHealth 卡，避免顶栏再次"看似实时、实则不刷新"的误导。
+export function LiveBadge({ active, intervalLabel }: { active: boolean; intervalLabel: string }) {
   return (
-    <span className="ml-1.5 inline-flex items-center gap-1.5 rounded-full border border-data-success/25 bg-data-success/8 px-2.5 py-1 font-mono text-[11px] tracking-wider text-data-success">
-      <PulseDot tone="success" />
-      {label}
+    <span
+      className={cn(
+        'ml-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px] tracking-wider',
+        active
+          ? 'border-data-success/25 bg-data-success/8 text-data-success'
+          : 'border-border bg-muted/40 text-muted-foreground',
+      )}
+    >
+      <PulseDot tone={active ? 'success' : 'idle'} />
+      {active ? `自动刷新 · ${intervalLabel}` : '自动刷新 · 关闭'}
     </span>
   )
 }
