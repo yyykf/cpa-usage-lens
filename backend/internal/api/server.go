@@ -87,19 +87,17 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// resolveRange 从 query 解析周期 → [startDate, endDate) 日期字符串（YYYY-MM-DD，end 半开）。
-func (s *Server) resolveRange(r *http.Request) (string, string, error) {
+// resolveRange 从 query 解析周期 → [start, end) 半开区间（time.Time，按 loc 时区的"天"边界）。
+// 返回 time.Time 而非字符串，便于上层据此推算"上一等长周期"（见 timeutil.PreviousRange）；
+// 落到查询时再用 timeutil.DateString 转 YYYY-MM-DD。
+func (s *Server) resolveRange(r *http.Request) (start, end time.Time, err error) {
 	period := r.URL.Query().Get("period")
 	if period == "custom" {
-		start, end, err := timeutil.CustomRange(r.URL.Query().Get("from"), r.URL.Query().Get("to"), s.loc)
-		if err != nil {
-			return "", "", err
-		}
-		return timeutil.DateString(start, s.loc), timeutil.DateString(end, s.loc), nil
+		return timeutil.CustomRange(r.URL.Query().Get("from"), r.URL.Query().Get("to"), s.loc)
 	}
 	if period == "" {
 		period = "7d"
 	}
-	start, end := timeutil.PeriodRange(period, time.Now(), s.loc)
-	return timeutil.DateString(start, s.loc), timeutil.DateString(end, s.loc), nil
+	start, end = timeutil.PeriodRange(period, time.Now(), s.loc)
+	return start, end, nil
 }

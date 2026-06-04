@@ -30,6 +30,15 @@ func PeriodRange(period string, now time.Time, loc *time.Location) (start, end t
 	return start, end
 }
 
+// PreviousRange 推算与 [start, end) 紧邻且等长的上一区间 [prevStart, start)。
+// prevEnd 即 start（半开衔接，无重叠无缝隙）；prevStart = start - (end-start)。
+// 因为所有周期都是按"天"对齐的半开区间，按天数平移天然落在天边界上，
+// 故 today(1天)/7d/30d/custom(任意天数) 都自动等长，无需关心原 period 标识。
+func PreviousRange(start, end time.Time) (prevStart, prevEnd time.Time) {
+	span := end.Sub(start)
+	return start.Add(-span), start
+}
+
 // CustomRange 把 [fromDate, toDate]（YYYY-MM-DD，含端点）转成 [start, end) 半开区间。
 func CustomRange(fromDate, toDate string, loc *time.Location) (start, end time.Time, err error) {
 	start, err = time.ParseInLocation("2006-01-02", fromDate, loc)
