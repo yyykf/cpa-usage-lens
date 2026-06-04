@@ -70,6 +70,71 @@ func TestBuildAccounts(t *testing.T) {
 	}
 }
 
+// BuildKeys：按脱敏指纹聚合，同指纹跨账号/模型合并，掩码随指纹带出，成本沿用账号榜口径。
+func TestBuildKeys(t *testing.T) {
+	d1 := time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{
+		// key fp1 跨两账号/两模型/两天 → 应合并成一行
+		{UsageDate: d1, Source: "a@x.com", Model: "gpt-5.4", KeyFingerprint: "fp1", KeyMask: "sk-aaaa…1111", Requests: 10, FailedRequests: 1, Tokens: model.Tokens{Total: 1000, Input: 600, Output: 400}},
+		{UsageDate: d1, Source: "b@x.com", Model: "claude", KeyFingerprint: "fp1", KeyMask: "sk-aaaa…1111", Requests: 5, Tokens: model.Tokens{Total: 500, Input: 300, Output: 200}},
+		{UsageDate: d2, Source: "a@x.com", Model: "gpt-5.4", KeyFingerprint: "fp1", KeyMask: "sk-aaaa…1111", Requests: 5, Tokens: model.Tokens{Total: 500, Input: 500}},
+		// 另一把 key
+		{UsageDate: d2, Source: "a@x.com", Model: "gpt-5.4", KeyFingerprint: "fp2", KeyMask: "sk-bbbb…2222", Requests: 20, FailedRequests: 2, Tokens: model.Tokens{Total: 2000, Input: 1200, Output: 800}},
+	}
+	keys := BuildKeys(rows, prices())
+	if len(keys) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(keys))
+	}
+	// 保持首次出现顺序：fp1 先
+	if keys[0].Fingerprint != "fp1" || keys[0].KeyMask != "sk-aaaa…1111" {
+		t.Errorf("key0 identity wrong: %+v", keys[0])
+	}
+	// fp1 跨行合并：requests 10+5+5=20，tokens 1000+500+500=2000，failed=1
+	if keys[0].Requests != 20 || keys[0].Tokens != 2000 || keys[0].Failed != 1 {
+		t.Errorf("fp1 aggregation wrong: %+v", keys[0])
+	}
+	if keys[0].InputTokens != 1400 || keys[0].OutputTokens != 600 {
+		t.Errorf("fp1 token split wrong: %+v", keys[0])
+	}
+	if keys[0].Cost == nil {
+		t.Error("fp1 cost should be known (all models priced)")
+	}
+	if keys[1].Fingerprint != "fp2" || keys[1].Requests != 20 || keys[1].Failed != 2 {
+		t.Errorf("fp2 wrong: %+v", keys[1])
+	}
+}
+
+// 缺价模型 → 该 key 成本未知（nil），但请求/token 仍照常聚合（与账号榜一致）。
+func TestBuildKeys_MissingPriceUnknownCost(t *testing.T) {
+	d := time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{
+		{UsageDate: d, Source: "a", Model: "noprice", KeyFingerprint: "fp1", KeyMask: "sk-x…1", Requests: 3, Tokens: model.Tokens{Total: 100, Input: 100}},
+	}
+	keys := BuildKeys(rows, map[string]model.ModelPrice{})
+	if len(keys) != 1 || keys[0].Cost != nil {
+		t.Errorf("missing price should yield nil cost: %+v", keys)
+	}
+	if keys[0].Requests != 3 {
+		t.Error("requests should aggregate even without prices")
+	}
+}
+
+// 非 key 认证桶（fp='none'）掩码为空时回退到指纹，避免前端展示空白。
+func TestBuildKeys_NoneBucketMaskFallback(t *testing.T) {
+	d := time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{
+		{UsageDate: d, Source: "a", Model: "gpt-5.4", KeyFingerprint: "none", KeyMask: "", Requests: 1, Tokens: model.Tokens{Total: 10, Input: 10}},
+	}
+	keys := BuildKeys(rows, prices())
+	if len(keys) != 1 || keys[0].Fingerprint != "none" {
+		t.Fatalf("expected single none bucket: %+v", keys)
+	}
+	if keys[0].KeyMask != "none" { // 掩码空 → 回退指纹
+		t.Errorf("empty mask should fall back to fingerprint, got %q", keys[0].KeyMask)
+	}
+}
+
 func TestBuildTrend(t *testing.T) {
 	tr := BuildTrend(sampleRows(), prices())
 	if len(tr) != 2 {

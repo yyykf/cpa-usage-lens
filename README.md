@@ -28,13 +28,13 @@ Account-level usage analytics for self-hosted **CLIProxyAPI (CPA)** users, with 
 
 ## Features
 
-- 📊 **Dark Bento dashboard** — period overview · per-account leaderboard · daily trend · collector health
+- 📊 **Dark Bento dashboard** — period overview · per-account leaderboard · per-API-key leaderboard (masked) · daily trend · collector health
 - ☁️ **Cloud-backed** — data sits in Supabase; locally you run only two lightweight containers (backend + frontend)
 - 💰 **Query-time cost estimation** via the LiteLLM price table — stores only the models you actually used, marks missing prices as *unknown*, and reflects price changes automatically (no backfill)
 - 🔒 **Single-user auth** — password login (bcrypt + JWT); every data API is authenticated
 - 🛡️ **Loss-resistant ingestion** — popped-but-not-yet-persisted batches are buffered to disk and deleted only after a confirmed write; the collector auto-recovers on restart
 - ♻️ **Bounded storage** — short-term hot detail (default 7 days, configurable) plus long-term daily rollups; always rolls up *before* cleaning up, so nothing is deleted prematurely
-- 🔑 **Sensitive fields stripped** before persistence — `api_key`, `response_headers`, and `fail.body` are never written to the database
+- 🔑 **Sensitive fields stripped** before persistence — the **plaintext `api_key` is never written** (only an irreversible `sha256` fingerprint + a `sk-…last4` mask are kept, to break usage down per key); `response_headers` and `fail.body` are dropped entirely
 
 ## Architecture
 

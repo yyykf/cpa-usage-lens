@@ -1,6 +1,7 @@
 import type {
   Overview,
   AccountUsage,
+  KeyUsage,
   TrendPoint,
   CollectorHealth,
   ModelBreakdown,
@@ -62,6 +63,7 @@ export async function login(password: string): Promise<void> {
 
 export const getOverview = (q: string) => req<Overview>(`/api/overview?${q}`)
 export const getAccounts = (q: string) => req<AccountUsage[]>(`/api/accounts?${q}`)
+export const getKeys = (q: string) => req<KeyUsage[]>(`/api/keys?${q}`)
 export const getTrend = (q: string) => req<TrendPoint[]>(`/api/trend?${q}`)
 // metric 决定 ranking 排序口径（默认 token）；ranking 每项同时含 tokens 与 cost，
 // 前端切口径通常就地重排即可，无需带 metric 二次请求。
