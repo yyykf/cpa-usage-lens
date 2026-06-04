@@ -15,7 +15,17 @@ function flatten(data: ModelBreakdown): Record<string, number | string>[] {
   })
 }
 
-export default function ModelStackChart({ data, loading }: { data: ModelBreakdown; loading: boolean }) {
+// headerExtra：可选，注入到面板标题右侧（图例之前）的额外控制（如视图切换段）。
+// 默认不传，独立使用时行为不变（仅图例）。
+export default function ModelStackChart({
+  data,
+  loading,
+  headerExtra,
+}: {
+  data: ModelBreakdown
+  loading: boolean
+  headerExtra?: React.ReactNode
+}) {
   const rows = useMemo(() => flatten(data), [data])
   const models = data.models
   const colorOf = useMemo(() => new Map(models.map((m, i) => [m, modelColor(i)])), [models])
@@ -34,6 +44,17 @@ export default function ModelStackChart({ data, loading }: { data: ModelBreakdow
     </div>
   )
 
+  // 有 headerExtra（被容器嵌套）时始终渲染右侧区，把控制段与图例并排；图例仅在有数据时显示。
+  const headerRight =
+    headerExtra !== undefined ? (
+      <div className="flex items-center gap-3.5">
+        {!loading && !isEmpty ? legend : null}
+        {headerExtra}
+      </div>
+    ) : !loading && !isEmpty ? (
+      legend
+    ) : undefined
+
   return (
     <Panel>
       <PanelHeader
@@ -44,7 +65,7 @@ export default function ModelStackChart({ data, loading }: { data: ModelBreakdow
           </span>
         }
         barColor={CHART_COLORS.tokens}
-        right={!loading && !isEmpty ? legend : undefined}
+        right={headerRight}
       />
       <div className="px-2 pb-3 pt-1.5">
         {loading ? (

@@ -4,6 +4,7 @@ import type {
   TrendPoint,
   CollectorHealth,
   ModelBreakdown,
+  ModelMetric,
   Period,
   CustomRange,
 } from '../types'
@@ -62,6 +63,9 @@ export async function login(password: string): Promise<void> {
 export const getOverview = (q: string) => req<Overview>(`/api/overview?${q}`)
 export const getAccounts = (q: string) => req<AccountUsage[]>(`/api/accounts?${q}`)
 export const getTrend = (q: string) => req<TrendPoint[]>(`/api/trend?${q}`)
-export const getModels = (q: string) => req<ModelBreakdown>(`/api/models?${q}`)
+// metric 决定 ranking 排序口径（默认 token）；ranking 每项同时含 tokens 与 cost，
+// 前端切口径通常就地重排即可，无需带 metric 二次请求。
+export const getModels = (q: string, metric?: ModelMetric) =>
+  req<ModelBreakdown>(`/api/models?${q}${metric ? `&metric=${metric}` : ''}`)
 export const getCollector = () => req<CollectorHealth>('/api/collector')
 export const refreshPrices = () => req<{ status: string }>('/api/prices/refresh', { method: 'POST' })
