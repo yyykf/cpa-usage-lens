@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端规范基线"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量与测试约定，核查 lint/test 及 sanitize_test 守门"}
+{"file": ".trellis/spec/backend/usage-queue-contract.md", "reason": "核查 api_key 脱敏处理符合队列契约、明文绝不入库"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "安全底线核查：任何日志无明文 api_key 泄露"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核查迁移 / 主键扩维 / key 聚合查询合规"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范基线"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量与测试约定"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "核查新增 key DTO 类型安全、无 any 漂移"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核查 key 维度跨层数据流一致"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核查是否复用账号榜模式、无重复造轮子"}
