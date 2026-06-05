@@ -233,7 +233,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
 
           <Kicker>03 — 用量榜 · {periodSubtitle}</Kicker>
-          <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3.5">
             <AccountTable accounts={accounts} loading={loading} />
             <KeyTable keys={keys} loading={loading} />
           </div>
