@@ -35,6 +35,17 @@ export interface AccountUsage extends TokenBreakdown {
   failed: number
 }
 
+// 按脱敏 api_key 聚合的用量榜（与账号榜正交、平级的独立维度）。
+// 字段口径与 AccountUsage 完全对齐，仅把维度键从 source 换成 fingerprint/keyMask。
+export interface KeyUsage extends TokenBreakdown {
+  fingerprint: string // sha256 hex 全长，做唯一标识 / React key；'none' = 非 key 认证桶
+  keyMask: string // 展示掩码（sk-…后4位）；'none' 桶可能是 "none"/"(no key)"
+  requests: number
+  tokens: number
+  cost: number | null
+  failed: number
+}
+
 export interface TrendPoint {
   date: string // YYYY-MM-DD
   requests: number

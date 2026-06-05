@@ -64,6 +64,16 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report.BuildAccounts(rows, s.prices.Prices()))
 }
 
+// handleKeys 返回「API key 用量榜」（按脱敏 key 指纹聚合，与账号榜并列的独立维度）。
+// 复用与账号榜同一份周期聚合行 + 同一成本算法，口径完全对齐（DRY）。
+func (s *Server) handleKeys(w http.ResponseWriter, r *http.Request) {
+	rows, ok := s.queryRange(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, report.BuildKeys(rows, s.prices.Prices()))
+}
+
 func (s *Server) handleTrend(w http.ResponseWriter, r *http.Request) {
 	rows, ok := s.queryRange(w, r)
 	if !ok {

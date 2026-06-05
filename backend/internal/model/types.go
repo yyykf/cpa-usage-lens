@@ -17,6 +17,7 @@ type Tokens struct {
 
 // UsageEvent 写入 request_events_hot 的一条精简明细
 // （已剥离 api_key / response_headers / fail.body 等敏感或大字段）。
+// KeyFingerprint/KeyMask 为客户端 api_key 的不可逆脱敏形态——明文绝不进本结构、绝不入库。
 type UsageEvent struct {
 	RequestID       string
 	EventTS         time.Time
@@ -27,6 +28,8 @@ type UsageEvent struct {
 	Alias           string
 	Endpoint        string
 	AuthType        string
+	KeyFingerprint  string // sha256(明文 api_key) 全长小写 hex；非 key 认证/空 key 落 'none'
+	KeyMask         string // 展示掩码（前缀…后4位）；非 key 认证/空 key 落 '(no key)'
 	Tokens          Tokens
 	LatencyMs       *int32
 	TTFTMs          *int32
@@ -36,11 +39,14 @@ type UsageEvent struct {
 	ServiceTier     string
 }
 
-// DailyUsage 对应 daily_account_usage 一行（账号+模型+天 聚合）。
+// DailyUsage 对应 daily_account_usage 一行（账号+模型+key+天 聚合）。
+// KeyFingerprint/KeyMask 为脱敏的客户端 api_key 维度（key 是独立视角，与账号正交）。
 type DailyUsage struct {
 	UsageDate      time.Time
 	Source         string
 	Model          string
+	KeyFingerprint string // sha256 指纹；'none' = 非 key 认证/未知归属
+	KeyMask        string // 展示掩码，随指纹带出
 	Requests       int64
 	FailedRequests int64
 	Tokens         Tokens
@@ -104,6 +110,24 @@ type OverviewCompare struct {
 // AccountUsage 账号用量榜一行（核心模块）。同样透出 token 拆分。
 type AccountUsage struct {
 	Source              string   `json:"source"`
+	Requests            int64    `json:"requests"`
+	Tokens              int64    `json:"tokens"`
+	Cost                *float64 `json:"cost"`
+	Failed              int64    `json:"failed"`
+	InputTokens         int64    `json:"inputTokens"`
+	OutputTokens        int64    `json:"outputTokens"`
+	ReasoningTokens     int64    `json:"reasoningTokens"`
+	CachedTokens        int64    `json:"cachedTokens"`
+	CacheReadTokens     int64    `json:"cacheReadTokens"`
+	CacheCreationTokens int64    `json:"cacheCreationTokens"`
+}
+
+// KeyUsage API key 用量榜一行（与账号榜并列的独立维度，按脱敏 key 聚合）。
+// Fingerprint 为聚合主键（前端唯一标识/做 React key）；KeyMask 供界面展示（如 sk-…2216）。
+// 指标口径（请求/失败/token 拆分/成本）与 AccountUsage 完全对齐（DRY）。
+type KeyUsage struct {
+	Fingerprint         string   `json:"fingerprint"`
+	KeyMask             string   `json:"keyMask"`
 	Requests            int64    `json:"requests"`
 	Tokens              int64    `json:"tokens"`
 	Cost                *float64 `json:"cost"`

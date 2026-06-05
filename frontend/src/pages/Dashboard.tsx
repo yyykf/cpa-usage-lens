@@ -12,6 +12,7 @@ import TrendChart from '../components/TrendChart'
 import CollectorHealthCard from '../components/CollectorHealth'
 import ModelUsagePanel from '../components/ModelUsagePanel'
 import AccountTable from '../components/AccountTable'
+import KeyTable from '../components/KeyTable'
 import { LiveBadge } from '../components/dashboard/LivePulse'
 import RefreshSelector from '../components/dashboard/RefreshSelector'
 import { Kicker } from '../components/dashboard/Primitives'
@@ -19,6 +20,7 @@ import { useAutoRefresh, refreshLabel } from '../hooks/useAutoRefresh'
 import {
   getOverview,
   getAccounts,
+  getKeys,
   getTrend,
   getModels,
   getCollector,
@@ -31,6 +33,7 @@ import type {
   CustomRange,
   Overview,
   AccountUsage,
+  KeyUsage,
   TrendPoint,
   ModelBreakdown,
   CollectorHealth as CollectorHealthData,
@@ -76,6 +79,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [custom, setCustom] = useState<CustomRange | null>(null)
   const [overview, setOverview] = useState<Overview | null>(null)
   const [accounts, setAccounts] = useState<AccountUsage[]>([])
+  const [keys, setKeys] = useState<KeyUsage[]>([])
   const [trend, setTrend] = useState<TrendPoint[]>([])
   const [models, setModels] = useState<ModelBreakdown>(EMPTY_MODELS)
   const [collector, setCollector] = useState<CollectorHealthData | null>(null)
@@ -103,9 +107,10 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
       try {
         if (!silent) setLoading(true)
         const q = periodQuery(period, custom ?? undefined)
-        const [o, a, t, m, c] = await Promise.all([
+        const [o, a, k, t, m, c] = await Promise.all([
           getOverview(q),
           getAccounts(q),
+          getKeys(q),
           getTrend(q),
           getModels(q),
           getCollector(),
@@ -114,6 +119,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
         if (reqId !== reqIdRef.current) return
         setOverview(o)
         setAccounts(a)
+        setKeys(k)
         setTrend(t)
         setModels(m)
         setCollector(c)
@@ -226,7 +232,11 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
             <ModelUsagePanel data={models} loading={loading} />
           </div>
 
-          <AccountTable accounts={accounts} loading={loading} />
+          <Kicker>03 — 用量榜 · {periodSubtitle}</Kicker>
+          <div className="grid grid-cols-1 gap-3.5">
+            <AccountTable accounts={accounts} loading={loading} />
+            <KeyTable keys={keys} loading={loading} />
+          </div>
         </div>
       </div>
       <Toaster position="bottom-right" />

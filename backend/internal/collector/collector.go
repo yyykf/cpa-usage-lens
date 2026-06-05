@@ -88,8 +88,11 @@ func (c *Collector) pollOnce(ctx context.Context) {
 	events := make([]model.UsageEvent, 0, len(items))
 	var lastTS time.Time
 	var lastID string
-	for _, raw := range items {
-		ev, ok := toEvent(raw)
+	for i := range items {
+		ev, ok := toEvent(items[i])
+		// toEvent 已就地把明文 api_key 算成指纹+掩码，明文不再有用：
+		// 立即清掉队列项里的明文引用，缩短其内存生命周期（即便后续 skip 也清）。
+		items[i].APIKey = ""
 		if !ok {
 			continue
 		}

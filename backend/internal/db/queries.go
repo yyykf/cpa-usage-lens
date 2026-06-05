@@ -6,15 +6,16 @@ import (
 	"github.com/code4j/cpa-usage-lens/backend/internal/model"
 )
 
-// QueryDailyUsage 取 [startDate, endDate) 区间按 (账号,模型,天) 的聚合行。
+// QueryDailyUsage 取 [startDate, endDate) 区间按 (账号,模型,key,天) 的聚合行。
 // startDate/endDate 为 YYYY-MM-DD（按配置时区界定的天边界，end 半开）。
+// 一并带出脱敏 key 维度（key_fingerprint/key_mask），供账号/趋势/模型/key 各榜在 report 层复用同一份行（DRY）。
 func (d *DB) QueryDailyUsage(ctx context.Context, startDate, endDate string) ([]model.DailyUsage, error) {
 	rows, err := d.Pool.Query(ctx, `
-SELECT usage_date, source, model, requests, failed_requests,
+SELECT usage_date, source, model, key_fingerprint, key_mask, requests, failed_requests,
        input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
 FROM daily_account_usage
 WHERE usage_date >= $1::date AND usage_date < $2::date
-ORDER BY usage_date, source, model`, startDate, endDate)
+ORDER BY usage_date, source, model, key_fingerprint`, startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
@@ -23,7 +24,7 @@ ORDER BY usage_date, source, model`, startDate, endDate)
 	var out []model.DailyUsage
 	for rows.Next() {
 		var u model.DailyUsage
-		if err := rows.Scan(&u.UsageDate, &u.Source, &u.Model, &u.Requests, &u.FailedRequests,
+		if err := rows.Scan(&u.UsageDate, &u.Source, &u.Model, &u.KeyFingerprint, &u.KeyMask, &u.Requests, &u.FailedRequests,
 			&u.Tokens.Input, &u.Tokens.Output, &u.Tokens.Reasoning, &u.Tokens.Cached,
 			&u.Tokens.CacheRead, &u.Tokens.CacheCreation, &u.Tokens.Total); err != nil {
 			return nil, err

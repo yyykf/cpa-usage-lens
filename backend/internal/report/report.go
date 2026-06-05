@@ -111,6 +111,59 @@ func BuildAccounts(rows []model.DailyUsage, prices map[string]model.ModelPrice) 
 	return out
 }
 
+// BuildKeys 按脱敏 api_key 指纹汇总用量榜（与账号榜并列的独立维度，保持首次出现顺序）。
+// 指标口径与 BuildAccounts 完全一致（DRY）；KeyMask 取同指纹下首个非空掩码做展示
+// （'none' 桶通常掩码为 '(no key)' 或空，回退到 fingerprint 以免界面空白）。
+func BuildKeys(rows []model.DailyUsage, prices map[string]model.ModelPrice) []model.KeyUsage {
+	type acc struct {
+		mask                                                    string
+		requests, tokens, failed                                int64
+		input, output, reasoning, cached, cacheRead, cacheCreat int64
+		rows                                                    []model.DailyUsage
+	}
+	m := map[string]*acc{}
+	order := []string{}
+	for _, r := range rows {
+		a := m[r.KeyFingerprint]
+		if a == nil {
+			a = &acc{}
+			m[r.KeyFingerprint] = a
+			order = append(order, r.KeyFingerprint)
+		}
+		if a.mask == "" && r.KeyMask != "" { // 同指纹掩码一致，取首个非空即可
+			a.mask = r.KeyMask
+		}
+		a.requests += r.Requests
+		a.tokens += r.Tokens.Total
+		a.failed += r.FailedRequests
+		a.input += r.Tokens.Input
+		a.output += r.Tokens.Output
+		a.reasoning += r.Tokens.Reasoning
+		a.cached += r.Tokens.Cached
+		a.cacheRead += r.Tokens.CacheRead
+		a.cacheCreat += r.Tokens.CacheCreation
+		a.rows = append(a.rows, r)
+	}
+	out := make([]model.KeyUsage, 0, len(order))
+	for _, fp := range order {
+		a := m[fp]
+		mask := a.mask
+		if mask == "" { // 掩码缺失兜底，避免前端展示空白
+			mask = fp
+		}
+		ku := model.KeyUsage{
+			Fingerprint: fp, KeyMask: mask, Requests: a.requests, Tokens: a.tokens, Failed: a.failed,
+			InputTokens: a.input, OutputTokens: a.output, ReasoningTokens: a.reasoning,
+			CachedTokens: a.cached, CacheReadTokens: a.cacheRead, CacheCreationTokens: a.cacheCreat,
+		}
+		if c, known := aggCost(a.rows, prices); known {
+			ku.Cost = &c
+		}
+		out = append(out, ku)
+	}
+	return out
+}
+
 // BuildTrend 按天汇总趋势（usage_date 已是按时区界定的"天"，直接格式化）。
 func BuildTrend(rows []model.DailyUsage, prices map[string]model.ModelPrice) []model.TrendPoint {
 	type day struct {

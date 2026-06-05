@@ -49,6 +49,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 	mux.Handle("GET /api/overview", s.requireAuth(s.handleOverview))
 	mux.Handle("GET /api/accounts", s.requireAuth(s.handleAccounts))
+	mux.Handle("GET /api/keys", s.requireAuth(s.handleKeys))
 	mux.Handle("GET /api/trend", s.requireAuth(s.handleTrend))
 	mux.Handle("GET /api/models", s.requireAuth(s.handleModels))
 	mux.Handle("GET /api/collector", s.requireAuth(s.handleCollector))
