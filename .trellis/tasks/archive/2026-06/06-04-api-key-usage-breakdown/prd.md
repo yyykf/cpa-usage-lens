@@ -34,7 +34,7 @@
 
 ## Assumptions（待验证假设）
 - 这个功能要在前端有可视化呈现（不只是后端能查）。
-- 生产采集器在 vmrack 运行，改采集逻辑 + 改 schema 后需要重新部署 + 跑生产 Supabase migration。
+- 生产采集器在生产采集器主机上运行，改采集逻辑 + 改 schema 后需要重新部署 + 跑生产 Supabase migration。
 
 ## Open Questions（仅保留阻塞/偏好类）
 - ~~Q1 脱敏形态~~ → **已定：指纹(哈希) + 掩码 两列都存**（指纹精确区分/做聚合主键，掩码 `sk-…后4位` 界面展示；均不可逆、不含明文）。
@@ -97,7 +97,7 @@
 - API：`backend/internal/api/handlers.go`（现有 `/api/{overview,accounts,trend,models,collector}`）。
 - 成本：`backend/internal/pricing`（缺价标未知）。
 - 前端：`frontend/src/pages/Dashboard.tsx` 及 `components/`。
-- 本地验证规约：生产采集器在 vmrack，本地 `COLLECTOR_ENABLED=false` 只读；写入类验证用独立 Supabase / 本地 PG / 单测喂假 payload，**绝不连生产 CPA 队列**。
+- 本地验证规约：生产采集器在生产采集器主机，本地 `COLLECTOR_ENABLED=false` 只读；写入类验证用独立 Supabase / 本地 PG / 单测喂假 payload，**绝不连生产 CPA 队列**。
 - **指纹算法（采集与回填必须一致）**：指纹 = `sha256(明文 api_key)` 小写 hex 全长；掩码 = `sk-…后4位`（实现时可含少量前缀，如 `sk-前缀…后4位`）。两端同算法，否则同把 key 指纹对不上、被当两把。
 - **回填目标 key**：code4j 已在对话提供明文（掩码 `sk-…2216`，目前在用的那把），并授权 AI 经 Supabase 执行回填；回填时用上述算法本地算指纹，**明文绝不写入任何文件/commit/PRD/库**。已建议 code4j 回填后轮换该 key。
 
