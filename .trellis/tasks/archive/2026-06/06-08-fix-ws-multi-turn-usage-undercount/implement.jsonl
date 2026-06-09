@@ -1,0 +1,1 @@
+{"file": ".trellis/spec/backend/usage-queue-contract.md", "reason": "破坏性 pop + buffer 重放是改入库逻辑的硬约束：决定本次必须保留 ON CONFLICT DO NOTHING 幂等，只把去重键从 request_id 换成复合主键，而非弃用 upsert/改纯 insert"}
