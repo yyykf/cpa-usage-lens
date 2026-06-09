@@ -15,7 +15,7 @@ type Store interface {
 	BumpCollectorState(ctx context.Context, s model.CollectorState) error
 }
 
-// Collector 轮询 CPA usage-queue，剥敏感、去重写库，并维护采集器状态。
+// Collector 轮询 CPA usage-queue，剥敏感、按复合键（request_id+event_ts+total_tokens）去重写库，并维护采集器状态。
 type Collector struct {
 	client    *CPAClient
 	store     Store
