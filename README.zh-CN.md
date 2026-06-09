@@ -39,7 +39,7 @@
 ## 架构
 
 ```
-CPA  GET /usage-queue  --轮询 pop-->  采集器（剥敏感 / request_id 去重 / 落盘缓冲）
+CPA  GET /usage-queue  --轮询 pop-->  采集器（剥敏感 / (request_id, event_ts, total_tokens) 复合键去重 / 落盘缓冲）
                                          │
                                          ▼
         request_events_hot（热明细，留 N 天）--每 rollup--> daily_account_usage（账号+模型+天，长期）

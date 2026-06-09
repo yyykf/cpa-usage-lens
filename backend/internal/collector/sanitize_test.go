@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/code4j/cpa-usage-lens/backend/internal/model"
 )
@@ -163,6 +164,80 @@ func TestUsageEventHasNoPlaintextKeyField(t *testing.T) {
 		if strings.Contains(dump, banned) {
 			t.Errorf("UsageEvent exposes a plaintext-key field %q: %s", banned, dump)
 		}
+	}
+}
+
+// 本次修复的语义守门：CPA ws 路径同一连接的多轮共享同一 request_id，靠每轮独立的
+// timestamp（→ event_ts）区分。toEvent 必须为各轮构造出去重复合键
+// (request_id, event_ts, total_tokens) 各字段正确、且轮与轮之间复合键互不相同的 event，
+// 这样入库侧 ON CONFLICT (request_id, event_ts, total_tokens) DO NOTHING 才不会把后续轮误吞。
+func TestToEvent_SameRequestIDDistinctComposite(t *testing.T) {
+	// 同一 ws 连接的两轮：request_id 相同，timestamp（每轮各自 time.Now()）与 total 不同。
+	rounds := []rawQueueItem{
+		{
+			Timestamp: "2026-05-05T12:00:00.111111111+08:00",
+			Source:    "user@example.com",
+			Model:     "gpt-5.4",
+			RequestID: "ws_conn_1",
+			Tokens:    rawTokens{Input: 10, Output: 5, Total: 15},
+		},
+		{
+			Timestamp: "2026-05-05T12:00:03.222222222+08:00",
+			Source:    "user@example.com",
+			Model:     "gpt-5.4",
+			RequestID: "ws_conn_1",
+			Tokens:    rawTokens{Input: 100, Output: 40, CacheRead: 90, Total: 140},
+		},
+	}
+
+	type compositeKey struct {
+		requestID string
+		eventTS   time.Time
+		total     int64
+	}
+	seen := make(map[compositeKey]bool, len(rounds))
+	for i, raw := range rounds {
+		ev, ok := toEvent(raw)
+		if !ok {
+			t.Fatalf("round %d: expected ok=true", i)
+		}
+		if ev.RequestID != "ws_conn_1" {
+			t.Errorf("round %d: request_id = %q, want shared ws_conn_1", i, ev.RequestID)
+		}
+		// 亚秒必须被保留（区分多轮的关键）：time.Parse(RFC3339) 自动吸收纳秒。
+		if ev.EventTS.Nanosecond() == 0 {
+			t.Errorf("round %d: sub-second lost, event_ts=%v", i, ev.EventTS)
+		}
+		k := compositeKey{ev.RequestID, ev.EventTS, ev.Tokens.Total}
+		if seen[k] {
+			t.Fatalf("round %d: composite key collides with an earlier round: %+v", i, k)
+		}
+		seen[k] = true
+	}
+	// 两轮各成一把复合键 → 入库不会被 DO NOTHING 去重吞掉（修漏记）。
+	if len(seen) != len(rounds) {
+		t.Fatalf("expected %d distinct composite keys, got %d", len(rounds), len(seen))
+	}
+}
+
+// 崩溃恢复幂等的语义守门：buffer 重放的是同一条物理记录，toEvent 对完全相同的原始项
+// 必产出完全相同的复合键 → 入库侧 DO NOTHING 跳过、不产生重复行。
+func TestToEvent_IdenticalRawYieldsIdenticalComposite(t *testing.T) {
+	raw := rawQueueItem{
+		Timestamp: "2026-05-05T12:00:00.123456789+08:00",
+		Source:    "user@example.com",
+		Model:     "gpt-5.4",
+		RequestID: "ws_conn_1",
+		Tokens:    rawTokens{Input: 10, Output: 5, Total: 15},
+	}
+	a, okA := toEvent(raw)
+	b, okB := toEvent(raw)
+	if !okA || !okB {
+		t.Fatalf("expected ok=true (a=%v b=%v)", okA, okB)
+	}
+	if a.RequestID != b.RequestID || !a.EventTS.Equal(b.EventTS) || a.Tokens.Total != b.Tokens.Total {
+		t.Errorf("replay must yield identical composite key: a=(%q,%v,%d) b=(%q,%v,%d)",
+			a.RequestID, a.EventTS, a.Tokens.Total, b.RequestID, b.EventTS, b.Tokens.Total)
 	}
 }
 

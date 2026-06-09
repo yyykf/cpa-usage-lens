@@ -39,7 +39,7 @@ Account-level usage analytics for self-hosted **CLIProxyAPI (CPA)** users, with 
 ## Architecture
 
 ```
-CPA  GET /usage-queue  --poll & pop-->  Collector (strip secrets / dedup by request_id / disk buffer)
+CPA  GET /usage-queue  --poll & pop-->  Collector (strip secrets / dedup by (request_id, event_ts, total_tokens) / disk buffer)
                                            │
                                            ▼
    request_events_hot (hot detail, kept N days) --rollup--> daily_account_usage (account + model + day, long-term)

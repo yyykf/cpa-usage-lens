@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/usage-queue-contract.md", "reason": "spec 明示 review collector 改动的第一问：任何步骤失败是否致已 pop 数据不可恢复；核对复合主键改动后幂等是否仍保护 buffer 重放"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "本任务跨 migration schema → db InsertEvents → rollup 多层，核对复合主键改动后数据 round-trip 与边界：同 request_id 多轮入库、同记录重放幂等、daily 派生正确"}
