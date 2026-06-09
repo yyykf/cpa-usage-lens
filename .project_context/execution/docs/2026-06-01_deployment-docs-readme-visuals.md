@@ -11,7 +11,7 @@
 
 - 从 `main` 创建 `codex/docs-deployment-friendly-assets` 分支。
 - 创建 Trellis 任务并记录 PRD：`.trellis/tasks/06-01-docs-deployment-friendly-assets/prd.md`。
-- 检查用户提供截图 `/Users/code4j/Pictures/cpa-usage-lens.jpg`，确认适合作为 README 真实产品截图。
+- 检查项目仪表盘截图 `docs/assets/dashboard-screenshot.jpg`，确认适合作为 README 真实产品截图。
 - 使用 imagegen 生成无真实账号数据的产品介绍图；最终采用视觉效果更好的第一版，并在 README 明确标注为概念预览，避免被理解为当前 UI 的精确截图。
 - 将图片资产保存到 `docs/assets/`。
 - 更新 `README.md`、`README.zh-CN.md`、`docs/deployment.md`、`docker-compose.prod.yml`。

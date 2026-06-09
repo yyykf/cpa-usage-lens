@@ -4,7 +4,7 @@
 {"file": ".trellis/spec/backend/cost-calculation.md", "reason": "key 榜「按成本」口径复用 model_prices 实时计算，缺价标未知"}
 {"file": ".trellis/spec/backend/error-handling.md", "reason": "handlers.go 新增 /api/keys endpoint 的错误处理约定"}
 {"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "脱敏底线：确保明文 api_key 绝不进任何日志(采集/错误/调试)"}
-{"file": ".trellis/spec/backend/deployment-guidelines.md", "reason": "schema 迁移(生产 Supabase)+存量回填+vmrack 采集器需重新部署，按部署约定执行"}
+{"file": ".trellis/spec/backend/deployment-guidelines.md", "reason": "schema 迁移(生产 Supabase)+存量回填+生产采集器主机采集器需重新部署，按部署约定执行"}
 {"file": ".trellis/spec/frontend/index.md", "reason": "前端规范入口 + Pre-Development Checklist，先读它再按需补读"}
 {"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "新增「API key 用量榜」组件，仿现有 AccountTable，挂进单页 Dashboard"}
 {"file": ".trellis/spec/frontend/type-safety.md", "reason": "新增 key 用量 DTO 类型，前后端契约，避免 any/类型漂移"}

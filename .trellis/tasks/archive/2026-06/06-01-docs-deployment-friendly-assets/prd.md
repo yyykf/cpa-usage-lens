@@ -12,7 +12,7 @@ Make CPA Usage Lens easier to deploy and evaluate from the public repository. Th
 - Make the production Compose default safer by not exposing the backend debug port by default.
 - Add a debug override Compose file for users who intentionally want to expose the backend port during troubleshooting.
 - Add README product visuals:
-  - Use `/Users/code4j/Pictures/cpa-usage-lens.jpg` as the real, redacted product screenshot if inspection shows it is suitable.
+  - Use the project dashboard screenshot (`docs/assets/dashboard-screenshot.jpg`) as the real, redacted product screenshot if inspection shows it is suitable.
   - Generate one product introduction image without real account data and store it in the repository.
   - Clearly label the generated product introduction image as a concept / visual direction rather than an exact current UI screenshot.
   - Reference both visuals from the README where they help users understand the product quickly.
@@ -66,4 +66,4 @@ Make CPA Usage Lens easier to deploy and evaluate from the public repository. Th
 - Branch: `codex/docs-deployment-friendly-assets`, created from `main`.
 - Current latest release verified during planning: `v0.1.1`.
 - Relevant files: `README.md`, `README.zh-CN.md`, `docs/deployment.md`, `docker-compose.prod.yml`, `.env.example`, `frontend/nginx.conf`.
-- User-provided screenshot: `/Users/code4j/Pictures/cpa-usage-lens.jpg`, `2370x2294` JPEG.
+- Project dashboard screenshot: `docs/assets/dashboard-screenshot.jpg`, `2370x2294` JPEG.

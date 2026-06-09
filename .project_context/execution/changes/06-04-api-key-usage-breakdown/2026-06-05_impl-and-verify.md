@@ -58,13 +58,13 @@
 
 - **DRY**：`BuildKeys`/`BuildAccounts`、`KeyTable`/`AccountTable` 结构性重复，Codex 建议抽公共组件。**本轮按 YAGNI 未抽**——account 榜与 key 榜未来可能分化（如 key 加别名）。若确定不分化，可抽 `UsageTable` 基础组件 + 通用聚合 helper（account/key 各传维度 key + 标签 getter）。
 
-## ⚠️ 待办：生产上线 rollout（需 code4j + vmrack，**不支持零停机**）
+## ⚠️ 待办：生产上线 rollout（需 code4j + 生产采集器主机，**不支持零停机**）
 
 daily 主键 3→4 列对生产正在跑的旧采集器（旧 rollup 用 3 列 `ON CONFLICT`）是破坏性变更。**必须按序**（详见 `docs/deployment.md`）：
 
-1. **code4j** 停 vmrack 采集器（`COLLECTOR_ENABLED=false`）
+1. **code4j** 停生产采集器主机上的采集器（`COLLECTOR_ENABLED=false`）
 2. 生产库跑迁移 `20260605002633_add_api_key_dimension.sql`
-3. **code4j** 部署新代码到 vmrack
+3. **code4j** 部署新代码到生产采集器主机
 4. **（AI 可执行）回填存量**：用 code4j 当前 key 算指纹，经 Supabase 把存量 daily 的 `none` 桶刷成当前 key；明文本地算、绝不落库
 5. **code4j** 重启采集器（`COLLECTOR_ENABLED=true`）
 

@@ -92,8 +92,8 @@
 
 ## 本地验证规约（重要：勿抢生产队列）
 
-- 生产采集器跑在 **vmrack**（`COLLECTOR_ENABLED=true`），CPA 队列 **pop 即删**，全局仅允许一个采集器——本地**绝不可**再起采集器。
-- **本 task 本地验证**：`.env` 置 **`COLLECTOR_ENABLED=false`**（见 `backend/cmd/server/main.go:49-64`——此时仅跑查询 API，**不采集 / 不 rollup / 不清理**），`DATABASE_URL` 连**同一生产 Supabase**，读 vmrack 写入的真实数据即可验证（前三批均为**读路径**，不需要消费队列）。
-- **自动刷新验证**：靠 vmrack 持续写入观察数字变化；或打开浏览器 Network 面板确认每 30s 发出一次 API 请求。
+- 生产采集器跑在**生产采集器主机**（`COLLECTOR_ENABLED=true`），CPA 队列 **pop 即删**，全局仅允许一个采集器——本地**绝不可**再起采集器。
+- **本 task 本地验证**：`.env` 置 **`COLLECTOR_ENABLED=false`**（见 `backend/cmd/server/main.go:49-64`——此时仅跑查询 API，**不采集 / 不 rollup / 不清理**），`DATABASE_URL` 连**同一生产 Supabase**，读生产采集器主机写入的真实数据即可验证（前三批均为**读路径**，不需要消费队列）。
+- **自动刷新验证**：靠生产采集器主机持续写入观察数字变化；或打开浏览器 Network 面板确认每 30s 发出一次 API 请求。
 - **勿点前端「刷新价格表」**（会写 `model_prices`）；`pricing` 的 `RunDaily` 在 `COLLECTOR_ENABLED` 开关之外、每日自动刷一次，开发期一般不触发。
 - **彻底隔离 / 写入类验证**（如将来 API key 脱敏采集）：用独立 Supabase 或本地 Postgres + 跑 `supabase/migrations` 造测试数据，或写**单元测试喂假 payload**（参考 `collector/sanitize_test.go`），**绝不连生产 CPA 队列**。
