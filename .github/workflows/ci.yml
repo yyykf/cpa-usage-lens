@@ -28,6 +28,15 @@ jobs:
           cache-dependency-path: backend/go.sum
       - run: go build ./...
       - run: go vet ./...
+      # Formatting gate: go build/vet ignore gofmt drift, so check it explicitly.
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-formatted (run: gofmt -w .):"
+            echo "$unformatted"
+            exit 1
+          fi
       # -race catches data races in the concurrent collector / disk buffer.
       - run: go test ./... -race
 

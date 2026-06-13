@@ -19,7 +19,7 @@ type rawQueueItem struct {
 	Alias           string          `json:"alias"`
 	Endpoint        string          `json:"endpoint"`
 	AuthType        string          `json:"auth_type"`
-	APIKey          string          `json:"api_key"`          // 敏感：剥离，不入库
+	APIKey          string          `json:"api_key"` // 敏感：剥离，不入库
 	RequestID       string          `json:"request_id"`
 	ReasoningEffort string          `json:"reasoning_effort"`
 	ServiceTier     string          `json:"service_tier"`
