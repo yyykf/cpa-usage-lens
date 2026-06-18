@@ -94,6 +94,10 @@ docs/       deployment & operations guide
 
 Full operational detail — the read-only-instance toggle (`COLLECTOR_ENABLED`), capacity assumptions, and recovery behavior — is in **[docs/deployment.md](docs/deployment.md)**.
 
+## Friendly Links
+
+- [LINUX DO - 新的理想型社区](https://linux.do/)
+
 ## License
 
 [MIT](./LICENSE) © 2026 KaiFan Yu
