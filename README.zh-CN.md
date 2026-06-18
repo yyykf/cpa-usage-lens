@@ -94,6 +94,10 @@ docs/       部署与运维文档
 
 完整运维细节 —— 只读实例开关（`COLLECTOR_ENABLED`）、容量假设、停机恢复 —— 见 **[docs/deployment.md](docs/deployment.md)**。
 
+## 友情链接
+
+- [LINUX DO - 新的理想型社区](https://linux.do/)
+
 ## 许可证
 
 [MIT](./LICENSE) © 2026 KaiFan Yu
