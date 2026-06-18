@@ -122,11 +122,11 @@ func TestKeyMask(t *testing.T) {
 		name, in, want string
 	}{
 		{"empty", "", noKeyMask},
-		{"typical sk", "sk-e305abcdef2216", "sk-…2216"}, // 前缀只到 sk-，… 后4位，对齐 PRD「sk-…后4位」
-		{"short no separator", "abc", shortKeyMask},     // rune 数 <= 前缀+后4 → 定长占位，绝不回显原文
-		{"short with sk", "sk-1", shortKeyMask},         // sk- + 后4 已覆盖整串、无遮蔽中段 → 占位 ****
-		{"sk just over threshold", "sk-12345", "sk-…2345"}, // 8 runes > 3+4，'1' 被真正遮蔽 → 可安全打码
-		{"no separator long", "abcdefghij", "key…ghij"},    // 无分隔符用固定前缀 key（不暴露原文）+ 后4
+		{"typical sk", "sk-e305abcdef2216", "sk-…2216"},          // 前缀只到 sk-，… 后4位，对齐 PRD「sk-…后4位」
+		{"short no separator", "abc", shortKeyMask},              // rune 数 <= 前缀+后4 → 定长占位，绝不回显原文
+		{"short with sk", "sk-1", shortKeyMask},                  // sk- + 后4 已覆盖整串、无遮蔽中段 → 占位 ****
+		{"sk just over threshold", "sk-12345", "sk-…2345"},       // 8 runes > 3+4，'1' 被真正遮蔽 → 可安全打码
+		{"no separator long", "abcdefghij", "key…ghij"},          // 无分隔符用固定前缀 key（不暴露原文）+ 后4
 		{"unicode suffix uses runes", "sk-长度测试键值😀好", "sk-…键值😀好"}, // 后4字符按 rune 取，不切坏 UTF-8
 	}
 	for _, c := range cases {
