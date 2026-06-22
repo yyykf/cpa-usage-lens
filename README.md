@@ -14,7 +14,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-Account-level usage analytics for self-hosted **CLIProxyAPI (CPA)** users, with a **near-zero local footprint**. An external collector drains CPA's usage queue, writes slimmed-down data to **Supabase (cloud Postgres)**, and serves a **polished dark dashboard** showing per-account request counts, token usage, and estimated cost over any period.
+Account-level usage analytics for self-hosted **[CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI)** users, with a **near-zero local footprint**. An external collector drains CPA's usage queue, writes slimmed-down data to **Supabase (cloud Postgres)**, and serves a **polished dark dashboard** showing per-account request counts, token usage, and estimated cost over any period.
 
 > **What's different:** the data lives in Supabase cloud and the local footprint is near-zero — most similar tools keep everything in a local SQLite file.
 
@@ -96,6 +96,7 @@ Full operational detail — the read-only-instance toggle (`COLLECTOR_ENABLED`),
 
 ## Friendly Links
 
+- [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) - the upstream proxy project whose usage queue powers CPA Usage Lens
 - [LINUX DO - 新的理想型社区](https://linux.do/)
 
 ## License

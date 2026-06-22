@@ -14,7 +14,7 @@
 
 [English](./README.md) · **简体中文**
 
-为运行 CLIProxyAPI (CPA) 的小服务器用户，提供**不占用本地资源**的账号级用量分析：用外部采集器消费 CPA 用量队列，把精简数据写入 **Supabase 云数据库**，并提供一个**美观的暗色 Web 仪表盘**，随时查看每个账号在一段周期内的请求数、token 用量与估算成本。
+为运行 [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) 的小服务器用户，提供**不占用本地资源**的账号级用量分析：用外部采集器消费 CPA 用量队列，把精简数据写入 **Supabase 云数据库**，并提供一个**美观的暗色 Web 仪表盘**，随时查看每个账号在一段周期内的请求数、token 用量与估算成本。
 
 > **差异化**：数据上 Supabase 云、本地近乎零负担（现有同类项目多用本地 SQLite）。
 
@@ -96,6 +96,7 @@ docs/       部署与运维文档
 
 ## 友情链接
 
+- [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)：CPA Usage Lens 消费其用量队列的上游代理项目
 - [LINUX DO - 新的理想型社区](https://linux.do/)
 
 ## 许可证
