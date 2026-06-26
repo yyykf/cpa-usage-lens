@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">CPA Usage Lens</title>
+  <desc id="desc">A lens-shaped usage chart mark for CPA Usage Lens.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#101013" />
+  <rect x="4.75" y="4.75" width="54.5" height="54.5" rx="13.25" fill="none" stroke="#242429" stroke-width="1.5" />
+  <circle cx="30" cy="30" r="17" fill="none" stroke="#ECEDEF" stroke-width="3" opacity="0.18" />
+  <path d="M42.2 42.2 52 52" stroke="#ECEDEF" stroke-width="4.2" stroke-linecap="round" opacity="0.62" />
+  <path d="M17 39.5 25.5 28.8 33.4 35.2 46.5 19.8" fill="none" stroke="#5AA0A8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="25.5" cy="28.8" r="4" fill="#8EC5CB" />
+  <circle cx="46.5" cy="19.8" r="4" fill="#8EC5CB" />
+  <path d="M16 12.5h10" stroke="#ECEDEF" stroke-width="2" stroke-linecap="round" opacity="0.2" />
+</svg>

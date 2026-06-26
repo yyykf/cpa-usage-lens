@@ -3,6 +3,7 @@ import { AlertCircle, Loader2, Lock } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import BrandLogo from '../components/BrandLogo'
 import { login } from '../lib/api'
 
 export default function Login({ onSuccess }: { onSuccess: () => void }) {
@@ -28,13 +29,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm gap-0 py-0 ring-1 ring-foreground/8">
         <CardHeader className="flex flex-col items-center gap-2 px-7 pt-8 pb-2 text-center">
-          <div className="mb-1 grid size-11 place-items-center rounded-xl border border-[hsl(240_8%_18%)] bg-linear-to-br from-[hsl(220_8%_10%)] to-[hsl(240_9%_4%)] shadow-[inset_0_1px_0_hsl(0_0%_100%/0.06),0_0_24px_hsl(186_31%_50%/0.16)]">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M3 17l5-6 4 4 4-7 5 8" stroke="hsl(var(--accent))" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="8" cy="11" r="1.6" fill="hsl(186 28% 57%)" />
-              <circle cx="16" cy="8" r="1.6" fill="hsl(186 28% 57%)" />
-            </svg>
-          </div>
+          <BrandLogo size="lg" className="mb-1" />
           <CardTitle className="font-mono text-base font-semibold uppercase tracking-[0.14em]">CPA Usage Lens</CardTitle>
           <CardDescription className="font-mono text-[11px] uppercase tracking-[0.2em] text-faint">
             账号用量分析 · 登录
