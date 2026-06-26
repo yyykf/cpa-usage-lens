@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import BrandLogo from '../components/BrandLogo'
 import PeriodSwitcher from '../components/PeriodSwitcher'
 import StatRail from '../components/dashboard/StatRail'
 import TokenComposition from '../components/dashboard/TokenComposition'
@@ -183,13 +184,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
         <div className="mx-auto max-w-[1320px] px-4 pb-16 md:px-7">
           <header className="flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-3.5">
-              <div className="grid size-[34px] place-items-center rounded-[9px] border border-[hsl(240_8%_18%)] bg-linear-to-br from-[hsl(220_8%_10%)] to-[hsl(240_9%_4%)] shadow-[inset_0_1px_0_hsl(0_0%_100%/0.06),0_0_20px_hsl(186_31%_50%/0.14)]">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path d="M3 17l5-6 4 4 4-7 5 8" stroke="hsl(var(--accent))" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <circle cx="8" cy="11" r="1.6" fill="hsl(186 28% 57%)" />
-                  <circle cx="16" cy="8" r="1.6" fill="hsl(186 28% 57%)" />
-                </svg>
-              </div>
+              <BrandLogo />
               <div>
                 <h1 className="font-mono text-[15px] font-semibold uppercase tracking-[0.14em] text-foreground">CPA Usage Lens</h1>
                 <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-faint">Usage · Cost · Models</div>
