@@ -62,9 +62,7 @@ func SplitInputTokens(t model.Tokens, provider string) InputTokenBreakdown {
 	cacheRead := t.CacheRead
 	uncached := t.Input
 	if inputIncludesCache(t, provider) {
-		if t.Cached > cacheRead {
-			cacheRead = t.Cached
-		}
+		cacheRead = max(t.Cached, t.CacheRead)
 		uncached = t.Input - cacheRead - t.CacheCreation
 		if uncached < 0 {
 			uncached = 0

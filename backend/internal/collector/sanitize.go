@@ -120,9 +120,7 @@ func toEvent(raw rawQueueItem) (model.UsageEvent, bool) {
 func normalizeCacheAliases(provider string, tokens *model.Tokens) {
 	switch strings.ToLower(provider) {
 	case "codex", "openai":
-		if tokens.CacheRead > tokens.Cached {
-			tokens.Cached = tokens.CacheRead
-		}
+		tokens.Cached = max(tokens.Cached, tokens.CacheRead)
 		tokens.CacheRead = 0
 	case "claude", "anthropic":
 		// CPA v7.2.67 同时填 Cached/CacheRead，且 creation-only 时还会用 creation

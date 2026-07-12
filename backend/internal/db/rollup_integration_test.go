@@ -57,12 +57,22 @@ WHERE usage_date='2026-07-11' AND source='legacy'`).Scan(&legacyLong); err != ni
 
 	threshold := int64(272000)
 	baseInput, baseOutput := 5e-6, 30e-6
+	baseCacheRead, baseCacheCreation := 0.5e-6, 6.25e-6
 	longInput, longOutput := 10e-6, 45e-6
+	longCacheRead, longCacheCreation := 1e-6, 12.5e-6
 	if err := database.UpsertPrices(ctx, []model.ModelPrice{{
 		Model: "roundtrip", Provider: "openai",
-		InputCostPerToken: &baseInput, OutputCostPerToken: &baseOutput,
-		LongContextThresholdTokens:   &threshold,
-		LongContextInputCostPerToken: &longInput, LongContextOutputCostPerToken: &longOutput,
+		InputCostPerToken:                    &baseInput,
+		OutputCostPerToken:                   &baseOutput,
+		CacheReadCostPerToken:                &baseCacheRead,
+		CacheCreationCostPerToken:            &baseCacheCreation,
+		LongContextThresholdTokens:           &threshold,
+		LongContextInputCostPerToken:         &longInput,
+		LongContextOutputCostPerToken:        &longOutput,
+		LongContextCacheReadCostPerToken:     &longCacheRead,
+		LongContextCacheCreationCostPerToken: &longCacheCreation,
+		Currency:                             "USD",
+		Source:                               "integration-test",
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -71,11 +81,20 @@ WHERE usage_date='2026-07-11' AND source='legacy'`).Scan(&legacyLong); err != ni
 		t.Fatal(err)
 	}
 	gotPrice := priceMap["roundtrip"]
-	if gotPrice.Provider != "openai" || gotPrice.LongContextThresholdTokens == nil ||
-		*gotPrice.LongContextThresholdTokens != 272000 || gotPrice.LongContextInputCostPerToken == nil ||
-		*gotPrice.LongContextInputCostPerToken != longInput {
-		t.Fatalf("model price roundtrip lost long-context fields: %+v", gotPrice)
+	if gotPrice.Provider != "openai" || gotPrice.Currency != "USD" || gotPrice.Source != "integration-test" {
+		t.Errorf("model price roundtrip lost metadata: %+v", gotPrice)
 	}
+	if gotPrice.LongContextThresholdTokens == nil || *gotPrice.LongContextThresholdTokens != threshold {
+		t.Errorf("threshold = %v, want %d", gotPrice.LongContextThresholdTokens, threshold)
+	}
+	assertNullableFloat(t, "base input", gotPrice.InputCostPerToken, baseInput)
+	assertNullableFloat(t, "base output", gotPrice.OutputCostPerToken, baseOutput)
+	assertNullableFloat(t, "base cache read", gotPrice.CacheReadCostPerToken, baseCacheRead)
+	assertNullableFloat(t, "base cache creation", gotPrice.CacheCreationCostPerToken, baseCacheCreation)
+	assertNullableFloat(t, "long input", gotPrice.LongContextInputCostPerToken, longInput)
+	assertNullableFloat(t, "long output", gotPrice.LongContextOutputCostPerToken, longOutput)
+	assertNullableFloat(t, "long cache read", gotPrice.LongContextCacheReadCostPerToken, longCacheRead)
+	assertNullableFloat(t, "long cache creation", gotPrice.LongContextCacheCreationCostPerToken, longCacheCreation)
 
 	_, err = database.Pool.Exec(ctx, `
 INSERT INTO model_prices (
@@ -121,6 +140,13 @@ UPDATE model_prices SET long_context_threshold_tokens=400000 WHERE model='gpt-5.
 	}
 	if len(rows) != 1 || rows[0].LongContext || rows[0].Requests != 2 {
 		t.Fatalf("reclassified rows = %+v, want one base row with 2 requests", rows)
+	}
+}
+
+func assertNullableFloat(t *testing.T, name string, got *float64, want float64) {
+	t.Helper()
+	if got == nil || *got != want {
+		t.Errorf("%s = %v, want %v", name, got, want)
 	}
 }
 

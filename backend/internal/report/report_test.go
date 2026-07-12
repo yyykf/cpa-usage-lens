@@ -120,6 +120,34 @@ func TestBuildAccounts(t *testing.T) {
 	}
 }
 
+func TestBuildAccountsAndKeys_NormalizeProviderInputAndCacheAliasesForDisplay(t *testing.T) {
+	day := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{
+		{UsageDate: day, Source: "user", Model: "gpt", KeyFingerprint: "fp", Tokens: model.Tokens{Input: 100, Cached: 30, CacheRead: 30, CacheCreation: 40}},
+		{UsageDate: day, Source: "user", Model: "claude", KeyFingerprint: "fp", Tokens: model.Tokens{Input: 2000, Cached: 1000, CacheRead: 1000, CacheCreation: 500}},
+	}
+	priceMap := map[string]model.ModelPrice{
+		"gpt":    {Provider: "openai", InputCostPerToken: fp(1)},
+		"claude": {Provider: "anthropic", InputCostPerToken: fp(1)},
+	}
+
+	accounts := BuildAccounts(rows, priceMap)
+	if len(accounts) != 1 {
+		t.Fatalf("accounts = %d, want 1", len(accounts))
+	}
+	if accounts[0].UncachedInputTokens != 2030 || accounts[0].CanonicalCacheReadTokens != 1030 {
+		t.Errorf("account canonical token lineage changed: %+v", accounts[0])
+	}
+
+	keys := BuildKeys(rows, priceMap)
+	if len(keys) != 1 {
+		t.Fatalf("keys = %d, want 1", len(keys))
+	}
+	if keys[0].UncachedInputTokens != 2030 || keys[0].CanonicalCacheReadTokens != 1030 {
+		t.Errorf("key canonical token lineage changed: %+v", keys[0])
+	}
+}
+
 // BuildKeys：按脱敏指纹聚合，同指纹跨账号/模型合并，掩码随指纹带出，成本沿用账号榜口径。
 func TestBuildKeys(t *testing.T) {
 	d1 := time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)
@@ -155,18 +183,77 @@ func TestBuildKeys(t *testing.T) {
 	}
 }
 
-// 缺价模型 → 该 key 成本未知（nil），但请求/token 仍照常聚合（与账号榜一致）。
-func TestBuildKeys_MissingPriceUnknownCost(t *testing.T) {
+// 缺价模型 → 该账号和 key 成本未知（nil），但请求/token 仍照常聚合。
+func TestBuildAccountsAndKeys_MissingPriceUnknownCost(t *testing.T) {
 	d := time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)
 	rows := []model.DailyUsage{
 		{UsageDate: d, Source: "a", Model: "noprice", KeyFingerprint: "fp1", KeyMask: "sk-x…1", Requests: 3, Tokens: model.Tokens{Total: 100, Input: 100}},
 	}
+	accounts := BuildAccounts(rows, map[string]model.ModelPrice{})
+	if len(accounts) != 1 || accounts[0].Cost != nil {
+		t.Errorf("missing price should yield nil account cost: %+v", accounts)
+	}
 	keys := BuildKeys(rows, map[string]model.ModelPrice{})
 	if len(keys) != 1 || keys[0].Cost != nil {
-		t.Errorf("missing price should yield nil cost: %+v", keys)
+		t.Errorf("missing price should yield nil key cost: %+v", keys)
 	}
-	if keys[0].Requests != 3 {
+	if accounts[0].Requests != 3 || keys[0].Requests != 3 {
 		t.Error("requests should aggregate even without prices")
+	}
+}
+
+func TestBuildAccountsAndKeys_IncompleteTierPriceUnknownCost(t *testing.T) {
+	d := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{{
+		UsageDate: d, Source: "a", Model: "gpt", KeyFingerprint: "fp1", LongContext: true,
+		Tokens: model.Tokens{Input: 100, Output: 20},
+	}}
+	priceMap := map[string]model.ModelPrice{
+		"gpt": {Provider: "openai", LongContextInputCostPerToken: fp(10e-6)},
+	}
+	accounts := BuildAccounts(rows, priceMap)
+	keys := BuildKeys(rows, priceMap)
+	if len(accounts) != 1 || accounts[0].Cost != nil {
+		t.Errorf("incomplete tier price should yield nil account cost: %+v", accounts)
+	}
+	if len(keys) != 1 || keys[0].Cost != nil {
+		t.Errorf("incomplete tier price should yield nil key cost: %+v", keys)
+	}
+}
+
+func TestBuildAccountsAndKeys_CostAccumulatorPreservesTierAndUnknownRules(t *testing.T) {
+	d := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{
+		{UsageDate: d, Source: "known", Model: "priced", KeyFingerprint: "known", Tokens: model.Tokens{Input: 100, Output: 100}},
+		{UsageDate: d, Source: "known", Model: "priced", KeyFingerprint: "known", LongContext: true, Tokens: model.Tokens{Input: 2, Output: 1}},
+		{UsageDate: d, Source: "unknown-first", Model: "missing", KeyFingerprint: "unknown-first", Tokens: model.Tokens{Input: 1}},
+		{UsageDate: d, Source: "unknown-first", Model: "priced", KeyFingerprint: "unknown-first", Tokens: model.Tokens{Input: 1}},
+		{UsageDate: d, Source: "unknown-last", Model: "priced", KeyFingerprint: "unknown-last", Tokens: model.Tokens{Input: 1}},
+		{UsageDate: d, Source: "unknown-last", Model: "missing", KeyFingerprint: "unknown-last", Tokens: model.Tokens{Input: 1}},
+	}
+	zero, longInput, longOutput := 0.0, 3.0, 5.0
+	priceMap := map[string]model.ModelPrice{
+		"priced": {
+			InputCostPerToken: &zero, OutputCostPerToken: &zero,
+			LongContextInputCostPerToken: &longInput, LongContextOutputCostPerToken: &longOutput,
+		},
+	}
+
+	accounts := BuildAccounts(rows, priceMap)
+	keys := BuildKeys(rows, priceMap)
+	if len(accounts) != 3 || len(keys) != 3 {
+		t.Fatalf("group counts = accounts %d, keys %d; want 3 each", len(accounts), len(keys))
+	}
+	if accounts[0].Source != "known" || keys[0].Fingerprint != "known" {
+		t.Fatalf("first-appearance order changed: accounts=%+v keys=%+v", accounts, keys)
+	}
+	if accounts[0].Cost == nil || *accounts[0].Cost != 11 || keys[0].Cost == nil || *keys[0].Cost != 11 {
+		t.Errorf("base zero cost plus long-context cost = accounts %v, keys %v; want 11", accounts[0].Cost, keys[0].Cost)
+	}
+	for i := 1; i < 3; i++ {
+		if accounts[i].Cost != nil || keys[i].Cost != nil {
+			t.Errorf("unknown cost at position %d must remain nil regardless of row order: accounts=%v keys=%v", i, accounts[i].Cost, keys[i].Cost)
+		}
 	}
 }
 

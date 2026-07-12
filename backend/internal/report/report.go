@@ -12,8 +12,30 @@ type aggregateTokens struct {
 	total, input, uncachedInput, output, reasoning, cached, cacheRead, canonicalCacheRead, cacheCreation int64
 }
 
-func (a *aggregateTokens) add(tokens model.Tokens, price model.ModelPrice) {
-	split := pricing.SplitInputTokens(tokens, price.Provider)
+type costAccumulator struct {
+	total float64
+	known bool
+}
+
+func newCostAccumulator() costAccumulator {
+	return costAccumulator{known: true}
+}
+
+func (a *costAccumulator) add(row model.DailyUsage, price model.ModelPrice, priceKnown bool) {
+	if !priceKnown {
+		a.known = false
+		return
+	}
+	cost, costKnown := pricing.CostAtTier(row.Tokens, price, row.LongContext)
+	if !costKnown {
+		a.known = false
+		return
+	}
+	a.total += cost
+}
+
+func (a *aggregateTokens) add(tokens model.Tokens, provider string) {
+	split := pricing.SplitInputTokens(tokens, provider)
 	a.total += tokens.Total
 	a.input += tokens.Input
 	a.uncachedInput += split.Uncached
@@ -25,24 +47,27 @@ func (a *aggregateTokens) add(tokens model.Tokens, price model.ModelPrice) {
 	a.cacheCreation += split.CacheCreation
 }
 
+func (a aggregateTokens) breakdown() model.TokenBreakdown {
+	return model.TokenBreakdown{
+		InputTokens:              a.input,
+		UncachedInputTokens:      a.uncachedInput,
+		OutputTokens:             a.output,
+		ReasoningTokens:          a.reasoning,
+		CachedTokens:             a.cached,
+		CacheReadTokens:          a.cacheRead,
+		CanonicalCacheReadTokens: a.canonicalCacheRead,
+		CacheCreationTokens:      a.cacheCreation,
+	}
+}
+
 // aggCost 累加一组按 model 的用量成本；任一行缺价或缺价格则整体成本标记未知（返回 known=false）。
 func aggCost(rows []model.DailyUsage, prices map[string]model.ModelPrice) (float64, bool) {
-	var total float64
-	known := true
+	cost := newCostAccumulator()
 	for _, r := range rows {
-		p, ok := prices[r.Model]
-		if !ok {
-			known = false
-			continue
-		}
-		c, ok := pricing.CostAtTier(r.Tokens, p, r.LongContext)
-		if !ok {
-			known = false
-			continue
-		}
-		total += c
+		price, priceKnown := prices[r.Model]
+		cost.add(r, price, priceKnown)
 	}
-	return total, known
+	return cost.total, cost.known
 }
 
 // BuildOverview 汇总周期内总请求/token/成本/失败 + token 拆分。
@@ -52,17 +77,10 @@ func BuildOverview(rows []model.DailyUsage, prices map[string]model.ModelPrice) 
 	for _, r := range rows {
 		o.Requests += r.Requests
 		o.Failed += r.FailedRequests
-		tokens.add(r.Tokens, prices[r.Model])
+		tokens.add(r.Tokens, prices[r.Model].Provider)
 	}
 	o.Tokens = tokens.total
-	o.InputTokens = tokens.input
-	o.UncachedInputTokens = tokens.uncachedInput
-	o.OutputTokens = tokens.output
-	o.ReasoningTokens = tokens.reasoning
-	o.CachedTokens = tokens.cached
-	o.CacheReadTokens = tokens.cacheRead
-	o.CanonicalCacheReadTokens = tokens.canonicalCacheRead
-	o.CacheCreationTokens = tokens.cacheCreation
+	o.TokenBreakdown = tokens.breakdown()
 	if c, known := aggCost(rows, prices); known {
 		o.Cost = &c
 	}
@@ -94,34 +112,32 @@ func BuildAccounts(rows []model.DailyUsage, prices map[string]model.ModelPrice) 
 	type acc struct {
 		requests, failed int64
 		tokens           aggregateTokens
-		rows             []model.DailyUsage
+		cost             costAccumulator
 	}
 	m := map[string]*acc{}
 	order := []string{}
 	for _, r := range rows {
 		a := m[r.Source]
 		if a == nil {
-			a = &acc{}
+			a = &acc{cost: newCostAccumulator()}
 			m[r.Source] = a
 			order = append(order, r.Source)
 		}
 		a.requests += r.Requests
 		a.failed += r.FailedRequests
-		a.tokens.add(r.Tokens, prices[r.Model])
-		a.rows = append(a.rows, r)
+		price, priceKnown := prices[r.Model]
+		a.tokens.add(r.Tokens, price.Provider)
+		a.cost.add(r, price, priceKnown)
 	}
 	out := make([]model.AccountUsage, 0, len(order))
 	for _, s := range order {
 		a := m[s]
 		au := model.AccountUsage{
 			Source: s, Requests: a.requests, Tokens: a.tokens.total, Failed: a.failed,
-			InputTokens: a.tokens.input, UncachedInputTokens: a.tokens.uncachedInput,
-			OutputTokens: a.tokens.output, ReasoningTokens: a.tokens.reasoning,
-			CachedTokens: a.tokens.cached, CacheReadTokens: a.tokens.cacheRead,
-			CanonicalCacheReadTokens: a.tokens.canonicalCacheRead, CacheCreationTokens: a.tokens.cacheCreation,
+			TokenBreakdown: a.tokens.breakdown(),
 		}
-		if c, known := aggCost(a.rows, prices); known {
-			au.Cost = &c
+		if a.cost.known {
+			au.Cost = &a.cost.total
 		}
 		out = append(out, au)
 	}
@@ -136,14 +152,14 @@ func BuildKeys(rows []model.DailyUsage, prices map[string]model.ModelPrice) []mo
 		mask             string
 		requests, failed int64
 		tokens           aggregateTokens
-		rows             []model.DailyUsage
+		cost             costAccumulator
 	}
 	m := map[string]*acc{}
 	order := []string{}
 	for _, r := range rows {
 		a := m[r.KeyFingerprint]
 		if a == nil {
-			a = &acc{}
+			a = &acc{cost: newCostAccumulator()}
 			m[r.KeyFingerprint] = a
 			order = append(order, r.KeyFingerprint)
 		}
@@ -152,8 +168,9 @@ func BuildKeys(rows []model.DailyUsage, prices map[string]model.ModelPrice) []mo
 		}
 		a.requests += r.Requests
 		a.failed += r.FailedRequests
-		a.tokens.add(r.Tokens, prices[r.Model])
-		a.rows = append(a.rows, r)
+		price, priceKnown := prices[r.Model]
+		a.tokens.add(r.Tokens, price.Provider)
+		a.cost.add(r, price, priceKnown)
 	}
 	out := make([]model.KeyUsage, 0, len(order))
 	for _, fp := range order {
@@ -164,13 +181,10 @@ func BuildKeys(rows []model.DailyUsage, prices map[string]model.ModelPrice) []mo
 		}
 		ku := model.KeyUsage{
 			Fingerprint: fp, KeyMask: mask, Requests: a.requests, Tokens: a.tokens.total, Failed: a.failed,
-			InputTokens: a.tokens.input, UncachedInputTokens: a.tokens.uncachedInput,
-			OutputTokens: a.tokens.output, ReasoningTokens: a.tokens.reasoning,
-			CachedTokens: a.tokens.cached, CacheReadTokens: a.tokens.cacheRead,
-			CanonicalCacheReadTokens: a.tokens.canonicalCacheRead, CacheCreationTokens: a.tokens.cacheCreation,
+			TokenBreakdown: a.tokens.breakdown(),
 		}
-		if c, known := aggCost(a.rows, prices); known {
-			ku.Cost = &c
+		if a.cost.known {
+			ku.Cost = &a.cost.total
 		}
 		out = append(out, ku)
 	}

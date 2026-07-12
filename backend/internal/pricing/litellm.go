@@ -111,10 +111,11 @@ func mapLongContextTier(data []byte, price *model.ModelPrice) {
 		return
 	}
 	price.LongContextThresholdTokens = &threshold
-	price.LongContextInputCostPerToken = floatField(fields, "input_cost_per_token_above_"+labels[0]+"_tokens")
-	price.LongContextOutputCostPerToken = floatField(fields, "output_cost_per_token_above_"+labels[0]+"_tokens")
-	price.LongContextCacheReadCostPerToken = floatField(fields, "cache_read_input_token_cost_above_"+labels[0]+"_tokens")
-	price.LongContextCacheCreationCostPerToken = floatField(fields, "cache_creation_input_token_cost_above_"+labels[0]+"_tokens")
+	tierSuffix := "_above_" + labels[0] + "_tokens"
+	price.LongContextInputCostPerToken = floatField(fields, "input_cost_per_token"+tierSuffix)
+	price.LongContextOutputCostPerToken = floatField(fields, "output_cost_per_token"+tierSuffix)
+	price.LongContextCacheReadCostPerToken = floatField(fields, "cache_read_input_token_cost"+tierSuffix)
+	price.LongContextCacheCreationCostPerToken = floatField(fields, "cache_creation_input_token_cost"+tierSuffix)
 }
 
 func parseTokenThreshold(label string) (int64, bool) {

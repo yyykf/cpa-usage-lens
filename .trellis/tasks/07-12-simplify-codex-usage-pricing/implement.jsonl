@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/cost-calculation.md","reason":"Authoritative provider cache, reasoning, long-context, rollup, and report behavior that cleanup must preserve."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Required guidance for identifying valuable reuse without speculative abstractions."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Required guidance for preserving source-to-database-to-report-to-frontend field lineage."}
