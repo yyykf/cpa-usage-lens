@@ -75,6 +75,45 @@ func TestCost_OpenAIStyle_WithCacheReadPrice(t *testing.T) {
 	}
 }
 
+// CPA v7.2.67 把 OpenAI 的同一份缓存读同时写入 cached_tokens/cache_read_tokens，
+// cache_write_tokens 则映射到 cache_creation_tokens；三类 input 必须拆开且各算一次。
+func TestCost_OpenAIStyle_CPA7267AliasesAndCacheWrite(t *testing.T) {
+	p := model.ModelPrice{
+		Provider:                  "openai",
+		InputCostPerToken:         fp(5e-6),
+		OutputCostPerToken:        fp(30e-6),
+		CacheReadCostPerToken:     fp(0.5e-6),
+		CacheCreationCostPerToken: fp(6.25e-6),
+	}
+	c, ok := Cost(model.Tokens{
+		Input: 100, Output: 20, Cached: 30, CacheRead: 30, CacheCreation: 40,
+	}, p)
+	if !ok {
+		t.Fatal("expected known cost")
+	}
+	want := 30*5e-6 + 30*0.5e-6 + 40*6.25e-6 + 20*30e-6
+	if math.Abs(c-want) > costEps {
+		t.Errorf("cost = %v, want %v", c, want)
+	}
+}
+
+func TestCost_OpenAIStyle_CacheWriteOnly(t *testing.T) {
+	p := model.ModelPrice{
+		Provider:                  "openai",
+		InputCostPerToken:         fp(5e-6),
+		OutputCostPerToken:        fp(30e-6),
+		CacheCreationCostPerToken: fp(6.25e-6),
+	}
+	c, ok := Cost(model.Tokens{Input: 100, CacheCreation: 40}, p)
+	if !ok {
+		t.Fatal("expected known cost")
+	}
+	want := 60*5e-6 + 40*6.25e-6
+	if math.Abs(c-want) > costEps {
+		t.Errorf("cost = %v, want %v", c, want)
+	}
+}
+
 // case 2：OpenAI 风格但缺 cache_read 专价 → cached 回退 input 价。
 // (input-cached)*ip + cached*ip == input*ip，因此结果等价于全量 input 按 input 价 + output。
 func TestCost_OpenAIStyle_NoCacheReadPriceFallsBackToInput(t *testing.T) {
@@ -108,6 +147,28 @@ func TestCost_ClaudeStyle_Unaffected(t *testing.T) {
 	}
 }
 
+// CPA v7.2.67 也会把 Claude 的 cache_read 同时放进 Cached/CacheRead；但 Claude
+// input 不含缓存，所以不能因为两个 alias 相等就套用 OpenAI 的 input 减法。
+func TestCost_ClaudeStyle_CPA7267AliasesRemainIndependent(t *testing.T) {
+	p := model.ModelPrice{
+		Provider:                  "anthropic",
+		InputCostPerToken:         fp(3e-6),
+		OutputCostPerToken:        fp(15e-6),
+		CacheReadCostPerToken:     fp(0.3e-6),
+		CacheCreationCostPerToken: fp(3.75e-6),
+	}
+	c, ok := Cost(model.Tokens{
+		Input: 2000, Cached: 1000, CacheRead: 1000, CacheCreation: 500, Output: 300,
+	}, p)
+	if !ok {
+		t.Fatal("expected known cost")
+	}
+	want := 2000*3e-6 + 1000*0.3e-6 + 500*3.75e-6 + 300*15e-6
+	if math.Abs(c-want) > costEps {
+		t.Errorf("cost = %v, want %v", c, want)
+	}
+}
+
 // case 4：纯 input/output 无任何缓存，回归不变。
 func TestCost_PlainNoCache(t *testing.T) {
 	p := model.ModelPrice{InputCostPerToken: fp(2.5e-6), OutputCostPerToken: fp(15e-6)}
@@ -118,6 +179,77 @@ func TestCost_PlainNoCache(t *testing.T) {
 	want := 1200*2.5e-6 + 800*15e-6
 	if math.Abs(c-want) > costEps {
 		t.Errorf("cost = %v, want %v", c, want)
+	}
+}
+
+// OpenAI reasoning_tokens 是 output_tokens 的子集；output 已整段计费后不能再叠加一次。
+func TestCost_ReasoningIsOutputBreakdownNotAdditionalTokens(t *testing.T) {
+	p := model.ModelPrice{Provider: "openai", OutputCostPerToken: fp(30e-6)}
+	c, ok := Cost(model.Tokens{Output: 20, Reasoning: 15}, p)
+	if !ok {
+		t.Fatal("expected known cost")
+	}
+	want := 20 * 30e-6
+	if math.Abs(c-want) > costEps {
+		t.Errorf("cost = %v, want %v", c, want)
+	}
+}
+
+func TestCost_NonOpenAIReasoningRemainsAdditional(t *testing.T) {
+	p := model.ModelPrice{Provider: "google", OutputCostPerToken: fp(2e-6)}
+	c, ok := Cost(model.Tokens{Output: 20, Reasoning: 15}, p)
+	if !ok {
+		t.Fatal("expected known cost")
+	}
+	want := (20 + 15) * 2e-6
+	if math.Abs(c-want) > costEps {
+		t.Errorf("cost = %v, want %v", c, want)
+	}
+}
+
+func TestCostAtTier_LongContextUsesHighPricesForWholeRequest(t *testing.T) {
+	p := model.ModelPrice{
+		Provider:                             "openai",
+		InputCostPerToken:                    fp(5e-6),
+		OutputCostPerToken:                   fp(30e-6),
+		CacheReadCostPerToken:                fp(0.5e-6),
+		CacheCreationCostPerToken:            fp(6.25e-6),
+		LongContextInputCostPerToken:         fp(10e-6),
+		LongContextOutputCostPerToken:        fp(45e-6),
+		LongContextCacheReadCostPerToken:     fp(1e-6),
+		LongContextCacheCreationCostPerToken: fp(12.5e-6),
+	}
+	tokens := model.Tokens{Input: 100, Output: 20, Cached: 30, CacheRead: 30, CacheCreation: 40}
+
+	base, ok := CostAtTier(tokens, p, false)
+	if !ok {
+		t.Fatal("expected known base cost")
+	}
+	wantBase := 30*5e-6 + 30*0.5e-6 + 40*6.25e-6 + 20*30e-6
+	if math.Abs(base-wantBase) > costEps {
+		t.Errorf("base cost = %v, want %v", base, wantBase)
+	}
+
+	long, ok := CostAtTier(tokens, p, true)
+	if !ok {
+		t.Fatal("expected known long-context cost")
+	}
+	wantLong := 30*10e-6 + 30*1e-6 + 40*12.5e-6 + 20*45e-6
+	if math.Abs(long-wantLong) > costEps {
+		t.Errorf("long cost = %v, want %v", long, wantLong)
+	}
+}
+
+func TestCostAtTier_MissingRequiredLongContextPriceIsUnknown(t *testing.T) {
+	p := model.ModelPrice{
+		Provider:                     "openai",
+		InputCostPerToken:            fp(5e-6),
+		OutputCostPerToken:           fp(30e-6),
+		LongContextInputCostPerToken: fp(10e-6),
+		// LongContextOutputCostPerToken intentionally missing.
+	}
+	if _, ok := CostAtTier(model.Tokens{Input: 100, Output: 20}, p, true); ok {
+		t.Fatal("expected unknown cost when a used long-context price is missing")
 	}
 }
 

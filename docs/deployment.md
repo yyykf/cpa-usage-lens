@@ -191,6 +191,8 @@ Use case: during iteration/debugging (e.g. validating the frontend or a new quer
 
 - Uses the **LiteLLM price table** (`model_prices_and_context_window.json` from `BerriAI/litellm`).
 - **Query-time calculation**: cost = tokens × current unit price; cost is never stored in the DB. Change a price and historical data automatically reflects it — no backfill.
+- **Whole-request long-context pricing**: when a model publishes a threshold, each hot request is classified with `input_tokens > threshold`; the selected tier applies to all input/cache/output tokens in that request.
+- **Cache semantics are provider-aware**: OpenAI input includes cache reads/writes, while Claude reports them independently. GPT-5.6 cache writes use CPA's normalized `cache_creation_tokens` field.
 - **Stores only used models**: fetched on startup + auto-refreshed daily + manually refreshable from the page.
 - Models without a price show **"unknown"** and take effect automatically once a price is added.
 
@@ -250,6 +252,25 @@ Use case: during iteration/debugging (e.g. validating the frontend or a new quer
 **Do not** migrate the database while the old binary is still collecting: the moment the primary key flips to composite, the still-running old insert starts failing on the single-column `ON CONFLICT`.
 
 **Why the change.** A CPA WebSocket connection shares one `request_id` across all of its conversation turns, so the old single-column key + `ON CONFLICT DO NOTHING` silently dropped every turn after the first (~71% usage undercount + collapsed cache-hit stats). The composite key distinguishes turns by their per-turn `event_ts` (nanosecond precision); `DO NOTHING` is kept so crash-recovery buffer replay stays idempotent. Rationale: `.project_context/design/decisions/0001-usage-hot-composite-pk.md`.
+
+---
+
+## 14. Breaking migration: long-context pricing dimension (no zero-downtime)
+
+> Applies when upgrading across `20260712220233_add_long_context_pricing.sql`. A fresh install is unaffected—run all migrations before the first start.
+
+**What changes.** The migration adds LiteLLM provider/threshold/high-tier fields to `model_prices`, adds `daily_account_usage.long_context`, and widens the daily primary key from `(usage_date, source, model, key_fingerprint)` to `(usage_date, source, model, key_fingerprint, long_context)`. Existing daily rows remain `long_context=false`; historical rows are intentionally not reclassified because their per-request hot detail may no longer exist.
+
+**Compatibility boundary.** Older CPA payloads remain supported: missing cache-write fields decode as zero, while CPA v7.2.67 cache aliases are normalized by the new Lens binary. The breaking boundary is the **Lens schema/binary pair**, not the CPA version. An old Lens binary still uses the four-column rollup conflict target, so it fails against the five-column primary key.
+
+**Required upgrade order (do not reorder).**
+
+1. **Stop the old collector** (`COLLECTOR_ENABLED=false` or stop the instance). Keep the outage shorter than CPA queue retention.
+2. **Run the migration** `20260712220233_add_long_context_pricing.sql`. It is idempotent and safe to re-run.
+3. **Deploy the new Lens binary with `COLLECTOR_ENABLED=false`**. Let its immediate LiteLLM refresh populate provider, threshold, and high-tier prices; use the dashboard's manual price refresh if needed.
+4. **Re-enable the collector**. The next rollup atomically rebuilds every retained hot day, classifying each request with the strict rule `input_tokens > model threshold`. Exactly-at-threshold requests stay in the base bucket.
+
+**Rollback.** Do not start an old Lens binary while the five-column key is present. Stop the new collector first, then either forward-fix or restore a pre-migration database backup. A schema-only downgrade must first merge `long_context=false/true` rows that share the old four-column key; simply dropping the column can fail with duplicate keys and would lose the tier distinction. There is intentionally no automatic down migration.
 
 ---
 
@@ -440,6 +461,8 @@ backend 是单进程，默认同时跑：后台采集循环 + rollup/清理调�
 
 - 用 **LiteLLM 价格表**（`BerriAI/litellm` 的 `model_prices_and_context_window.json`）。
 - **query-time 计算**：成本 = token × 当前单价，不在库里存死 cost；改了价格历史数据自动按新价显示，无需回填。
+- **长上下文按整请求计价**：模型存在阈值时，hot 明细逐请求按 `input_tokens > threshold` 分档；选中的价格档作用于该请求全部 input/cache/output token。
+- **缓存口径按 provider 区分**：OpenAI input 包含缓存读写，Claude 则独立上报；GPT-5.6 缓存写使用 CPA 已归一化的 `cache_creation_tokens`。
 - **只存用过的模型**：启动拉取 + 每日自动刷新 + 页面可手动刷新。
 - 缺价模型显示**"未知"**，补价后自动生效。
 
@@ -499,3 +522,22 @@ backend 是单进程，默认同时跑：后台采集循环 + rollup/清理调�
 **切勿**在旧 binary 还在采集时就迁移数据库：主键一旦切到复合，仍在运行的旧入库立刻会因单列 `ON CONFLICT` 失配而报错。
 
 **为什么改。** CPA 的一个 WebSocket 连接的多轮对话共享同一个 `request_id`，旧的单列主键 + `ON CONFLICT DO NOTHING` 会把同连接第一轮之后的轮次静默丢弃（约 71% 用量漏记 + 缓存命中率统计塌陷）。复合主键靠每轮独立的 `event_ts`（纳秒精度）区分多轮；保留 `DO NOTHING` 以守崩溃恢复 buffer 重放的幂等。详见 `.project_context/design/decisions/0001-usage-hot-composite-pk.md`。
+
+---
+
+## 十四、破坏性迁移：长上下文价格维度（不支持零停机）
+
+> 适用于升级时跨过迁移 `20260712220233_add_long_context_pricing.sql`。全新部署不受影响——首次启动前执行全部迁移即可。
+
+**改了什么。** 迁移为 `model_prices` 增加 LiteLLM provider、模型阈值和高档价格，为 `daily_account_usage` 增加 `long_context`，并把 daily 主键从 `(usage_date, source, model, key_fingerprint)` 扩成 `(usage_date, source, model, key_fingerprint, long_context)`。已有 daily 行统一保留为 `long_context=false`；历史请求明细可能已被清理，因此本次明确不追溯重分档。
+
+**兼容边界。** 旧 CPA payload 仍然兼容：缺失的缓存写字段按零解析，CPA v7.2.67 的缓存别名由新 Lens binary 归一化。破坏性边界是 **Lens schema 与 binary 的配套版本**，不是 CPA 版本。旧 Lens 仍使用四列 rollup conflict target，面对五列主键会持续失败。
+
+**必须按序执行（不要调换顺序）。**
+
+1. **停止旧采集器**（`COLLECTOR_ENABLED=false` 或停止实例），并把停机窗口压在 CPA queue retention 以内。
+2. **执行迁移** `20260712220233_add_long_context_pricing.sql`；迁移是幂等的，可安全重跑。
+3. **以 `COLLECTOR_ENABLED=false` 部署新 Lens binary**，等待启动时的 LiteLLM 刷新写入 provider、阈值和高档价格；必要时在页面手动刷新价格。
+4. **重新启用采集器**。下一次 rollup 会原子重建 hot retention 内的每日聚合，并按严格条件 `input_tokens > 模型阈值` 分档；等于阈值仍走基础价格。
+
+**回滚。** 五列主键存在时绝不能启动旧 Lens binary。先停止新采集器，再选择向前修复或恢复迁移前数据库备份。若必须只回退 schema，需要先合并旧四列主键相同的 `long_context=false/true` 两行；直接删列可能因重复键失败，也会丢失分档语义。本项目不提供自动 down migration。

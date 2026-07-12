@@ -53,6 +53,56 @@ func TestBuildOverview_MissingPriceMeansUnknownCost(t *testing.T) {
 	}
 }
 
+func TestBuildOverview_MixedLongContextRowsPricePerTierThenAggregate(t *testing.T) {
+	day := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{
+		{UsageDate: day, Source: "a", Model: "gpt-5.6-sol", Requests: 1, Tokens: model.Tokens{Input: 100, Output: 20}},
+		{UsageDate: day, Source: "a", Model: "gpt-5.6-sol", LongContext: true, Requests: 1, Tokens: model.Tokens{Input: 100, Output: 20}},
+	}
+	prices := map[string]model.ModelPrice{
+		"gpt-5.6-sol": {
+			Provider:                      "openai",
+			InputCostPerToken:             fp(5e-6),
+			OutputCostPerToken:            fp(30e-6),
+			LongContextInputCostPerToken:  fp(10e-6),
+			LongContextOutputCostPerToken: fp(45e-6),
+		},
+	}
+	o := BuildOverview(rows, prices)
+	if o.Requests != 2 || o.InputTokens != 200 || o.OutputTokens != 40 {
+		t.Errorf("mixed-tier totals changed: %+v", o)
+	}
+	if o.Cost == nil {
+		t.Fatal("expected known cost")
+	}
+	want := 100*5e-6 + 20*30e-6 + 100*10e-6 + 20*45e-6
+	if got := *o.Cost; got != want {
+		t.Errorf("cost = %v, want %v", got, want)
+	}
+}
+
+func TestBuildOverview_NormalizesProviderInputAndCacheAliasesForDisplay(t *testing.T) {
+	day := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{
+		{UsageDate: day, Model: "gpt", Tokens: model.Tokens{Input: 100, Cached: 30, CacheRead: 30, CacheCreation: 40}},
+		{UsageDate: day, Model: "claude", Tokens: model.Tokens{Input: 2000, Cached: 1000, CacheRead: 1000, CacheCreation: 500}},
+	}
+	prices := map[string]model.ModelPrice{
+		"gpt":    {Provider: "openai", InputCostPerToken: fp(1)},
+		"claude": {Provider: "anthropic", InputCostPerToken: fp(1)},
+	}
+	o := BuildOverview(rows, prices)
+	if o.UncachedInputTokens != 2030 { // OpenAI 100-30-40 + Claude 2000
+		t.Errorf("uncached input = %d, want 2030", o.UncachedInputTokens)
+	}
+	if o.CanonicalCacheReadTokens != 1030 {
+		t.Errorf("canonical cache read = %d, want 1030", o.CanonicalCacheReadTokens)
+	}
+	if o.CacheCreationTokens != 540 {
+		t.Errorf("cache creation = %d, want 540", o.CacheCreationTokens)
+	}
+}
+
 func TestBuildAccounts(t *testing.T) {
 	accs := BuildAccounts(sampleRows(), prices())
 	if len(accs) != 2 {

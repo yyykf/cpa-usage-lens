@@ -1,52 +1,161 @@
 # Cost Calculation Contract
 
-> How token cost is computed in `internal/pricing/cost.go`. Read this BEFORE changing
-> pricing logic — the cache semantics are counter-intuitive and have shipped a bug once.
+> Read this before changing CPA token parsing, LiteLLM price fields, daily rollup,
+> report DTOs, or `internal/pricing/cost.go`.
 
----
+## Scenario: Provider-aware cache and long-context pricing
 
-## Provider cache semantics differ (the expensive trap)
+### 1. Scope / Trigger
 
-Token usage is reported and billed differently per provider:
+- Trigger: any change to CPA token aliases, provider semantics, reasoning tokens,
+  LiteLLM price parsing, `daily_account_usage`, or token-composition display.
+- Cost is computed at query time; fixed cost must never be persisted.
+- The current MVP supports the default service tier and one threshold per model.
 
-| | OpenAI / GPT | Anthropic / Claude |
-|---|---|---|
-| Is `cached` part of `input_tokens`? | **Yes** — `cached_tokens` is a *subset* of `input_tokens` | **No** — input counts non-cached only |
-| Cache fields populated | `cached_tokens` | `cache_read_tokens` / `cache_creation_tokens` |
-| Cache pricing | cached billed at the `cache_read` rate (≈ 1/10 of input for gpt-5.4) | each field has its own rate |
+### 2. Signatures
 
-**The trap**: for OpenAI, charging the full `input_tokens` at input price
-double-charges the cached portion at ~10× its real rate. Cache-heavy traffic
-(Codex runs hit 80–99% cache) is overcharged by up to ~10×.
-
-## The rule (auto-detect by field shape, no provider name)
+CPA queue input:
 
 ```text
-billableInput = input_tokens
-if cached > 0 && cache_read == 0:          # OpenAI shape
-    billableInput = input_tokens - cached   # split cached OUT of input
-    cost += cached * cache_read_price        # cached at discount (fallback: input price)
-cost += billableInput * input_price
-# Claude shape (cached == 0): input stays whole; cache_read / cache_creation added separately
+tokens.input_tokens
+tokens.output_tokens
+tokens.reasoning_tokens
+tokens.cached_tokens
+tokens.cache_read_tokens
+tokens.cache_creation_tokens
 ```
 
-- Shape is detected by `cached > 0 && cache_read == 0`, NOT by a provider name.
-  No strategy pattern yet — intentional (YAGNI).
-- `reasoning_tokens` bill at the **output** price.
-- If a token type is > 0 but its price is missing → return `unknown` (nil cost),
-  never `$0`. Cost is computed at query time from the current price table, never
-  stored, so price changes need no backfill.
-- Defensive: if `cached > input` (bad data), clamp `billableInput` to 0; no negative cost.
+Price contract (`model_prices` / `model.ModelPrice`):
 
-## When to revisit (evolve to a strategy pattern)
+```text
+provider
+input/output/cache_read/cache_creation base prices
+long_context_threshold_tokens
+input/output/cache_read/cache_creation long-context prices
+```
 
-If a future provider's cache semantics don't fit "cached ⊆ input  XOR  independent
-cache_read/creation", the field-shape heuristic breaks. That is the signal to
-introduce a per-provider strategy. Until then, keep it simple.
+Daily primary key:
 
-## Why this matters
+```text
+(usage_date, source, model, key_fingerprint, long_context)
+```
 
-This exact bug shipped once: total cost showed **$3.9975** when it should have been
-**$2.2012** (−45%). The fix was ~8 lines; finding it required real data + manual
-recompute. Any pricing change that ignores this contract silently re-introduces the
-overcharge — there is no test that will scream unless you keep the cached-discount cases.
+Report display fields retain raw counts and add canonical fields:
+
+```text
+uncachedInputTokens
+canonicalCacheReadTokens
+```
+
+### 3. Contracts
+
+#### OpenAI / Codex
+
+CPA v7.2.67 copies the same cache read into both `cached_tokens` and
+`cache_read_tokens`, and maps OpenAI `cache_write_tokens` to
+`cache_creation_tokens`. Canonical billing is:
+
+```text
+cache_read = max(cached_tokens, cache_read_tokens)
+cache_write = cache_creation_tokens
+uncached_input = max(input_tokens - cache_read - cache_write, 0)
+```
+
+Both read and write may be non-zero in one request. Never add the two cache-read
+aliases together.
+
+#### Anthropic / Claude
+
+Claude input excludes its separately reported cache tokens:
+
+```text
+uncached_input = input_tokens
+cache_read = cache_read_tokens
+cache_write = cache_creation_tokens
+```
+
+Ignore CPA's Claude `cached_tokens` compatibility alias, including the
+creation-only fallback introduced in v7.2.67.
+
+#### Reasoning
+
+- OpenAI `reasoning_tokens` is a subset of `output_tokens`; charge output once.
+- Non-OpenAI providers retain the legacy independent reasoning charge unless
+  their provider contract proves reasoning is included in output.
+
+#### Long context
+
+- Threshold comes from LiteLLM metadata; never hard-code 272000 globally.
+- Classification is strict: `input_tokens > threshold`.
+- Crossing the threshold switches input, output, cache-read, and cache-write
+  prices for the full request; this is not marginal pricing.
+- Classify while request-level hot detail exists and persist the boolean tier in
+  daily rollup. Never infer it from a daily token sum.
+- If LiteLLM publishes multiple thresholds for one model, leave the boolean-tier
+  metadata unset rather than silently collapsing multiple tiers into one.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Old CPA omits cache write | Decode as zero; ingestion continues |
+| CPA v7.2.67 duplicates cache read aliases | Canonicalize and bill/display once |
+| Cache read + write exceeds OpenAI input | Clamp uncached input to zero |
+| Required base/high input or output price is missing | Cost is unknown, never zero |
+| Model threshold is missing | Rollup uses base bucket |
+| Price refresh later adds/changes threshold | Rebuild retained hot days and remove stale tier rows |
+| Existing daily row during migration | Preserve as `long_context=false` |
+| Old Lens binary against five-column daily key | Rollup fails; zero-downtime upgrade is unsupported |
+
+### 5. Good / Base / Bad Cases
+
+- Good: OpenAI `input=100, cached=30, cache_read=30, creation=40` bills
+  30 ordinary input, 30 cache read, and 40 cache write.
+- Base: a model without threshold fields keeps existing base-price behavior.
+- Good: `input=272000` remains base while `input=272001` uses the high tier.
+- Bad: `input * base_price + cached * read_price + creation * write_price` for
+  OpenAI; this charges cached input more than once.
+- Bad: subtracting cache creation from Claude input; Claude input is already
+  independent.
+- Bad: classifying long context from `sum(input_tokens)` after daily aggregation.
+
+### 6. Tests Required
+
+- Pricing unit tests:
+  - CPA v7.2.67 OpenAI aliases + cache write.
+  - OpenAI cache-write-only.
+  - Claude duplicated aliases remain independent.
+  - OpenAI reasoning subset and non-OpenAI reasoning regression.
+  - base versus long-context whole-request prices.
+- LiteLLM parsing tests: provider, `272k -> 272000`, four high prices, no-threshold
+  fallback.
+- Collector tests: Codex and Claude alias normalization.
+- Report tests: mixed base/long rows price separately but aggregate totals;
+  canonical display fields are provider-aware.
+- PostgreSQL integration test: idempotent migration, existing-row default,
+  strict threshold boundary, two-bucket rollup, price round-trip, and stale-bucket
+  removal after threshold change.
+- Frontend production build must type-check the new DTO fields.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```go
+cost := input*inputPrice + cached*cacheReadPrice + cacheWrite*cacheWritePrice
+cost += output*outputPrice + reasoning*outputPrice
+```
+
+This double-charges OpenAI cache tokens and reasoning.
+
+#### Correct
+
+```go
+split := pricing.SplitInputTokens(tokens, price.Provider)
+cost := split.Uncached*inputPrice + split.CacheRead*cacheReadPrice +
+    split.CacheCreation*cacheWritePrice
+cost += output * outputPrice
+// Add reasoning separately only for providers whose output excludes it.
+```
+
+Select the base or long-context price set before applying this shared split.

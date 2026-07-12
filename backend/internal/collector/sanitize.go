@@ -3,6 +3,7 @@ package collector
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"time"
 
 	"github.com/code4j/cpa-usage-lens/backend/internal/model"
@@ -110,5 +111,22 @@ func toEvent(raw rawQueueItem) (model.UsageEvent, bool) {
 	if raw.Fail != nil && raw.Fail.StatusCode != nil {
 		ev.FailStatusCode = raw.Fail.StatusCode
 	}
+	normalizeCacheAliases(ev.Provider, &ev.Tokens)
 	return ev, true
+}
+
+// normalizeCacheAliases 把 CPA 针对不同 provider 的兼容别名收敛为 Lens 既有口径。
+// Codex/OpenAI 用 Cached 表示 input 内含的缓存读，CacheRead 清零避免报表重复展示。
+func normalizeCacheAliases(provider string, tokens *model.Tokens) {
+	switch strings.ToLower(provider) {
+	case "codex", "openai":
+		if tokens.CacheRead > tokens.Cached {
+			tokens.Cached = tokens.CacheRead
+		}
+		tokens.CacheRead = 0
+	case "claude", "anthropic":
+		// CPA v7.2.67 同时填 Cached/CacheRead，且 creation-only 时还会用 creation
+		// 回填 Cached；Claude 的权威字段是独立的 CacheRead/CacheCreation。
+		tokens.Cached = 0
+	}
 }

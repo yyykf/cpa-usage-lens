@@ -47,6 +47,7 @@ type DailyUsage struct {
 	Model          string
 	KeyFingerprint string // sha256 指纹；'none' = 非 key 认证/未知归属
 	KeyMask        string // 展示掩码，随指纹带出
+	LongContext    bool   // 单请求 input 超过该模型阈值；整行使用长上下文价格
 	Requests       int64
 	FailedRequests int64
 	Tokens         Tokens
@@ -54,14 +55,20 @@ type DailyUsage struct {
 
 // ModelPrice 对应 model_prices 一行（LiteLLM 每 token USD 单价；nil = 缺该项价格）。
 type ModelPrice struct {
-	Model                     string
-	InputCostPerToken         *float64
-	OutputCostPerToken        *float64
-	CacheReadCostPerToken     *float64
-	CacheCreationCostPerToken *float64
-	Currency                  string
-	Source                    string
-	UpdatedAt                 time.Time
+	Model                                string
+	Provider                             string
+	InputCostPerToken                    *float64
+	OutputCostPerToken                   *float64
+	CacheReadCostPerToken                *float64
+	CacheCreationCostPerToken            *float64
+	LongContextThresholdTokens           *int64
+	LongContextInputCostPerToken         *float64
+	LongContextOutputCostPerToken        *float64
+	LongContextCacheReadCostPerToken     *float64
+	LongContextCacheCreationCostPerToken *float64
+	Currency                             string
+	Source                               string
+	UpdatedAt                            time.Time
 }
 
 // CollectorState 对应 collector_state 单行（采集器游标 + 健康）。
@@ -84,18 +91,20 @@ type CollectorState struct {
 // 区别于"上一周期有数据但某指标为 0"）。后端只下发两段绝对值，
 // 不在后端算百分比——避免除 0 得 ↑∞，具体兜底呈现由前端按设计稿决定。
 type Overview struct {
-	Requests            int64            `json:"requests"`
-	Tokens              int64            `json:"tokens"`
-	Cost                *float64         `json:"cost"`
-	Failed              int64            `json:"failed"`
-	InputTokens         int64            `json:"inputTokens"`
-	OutputTokens        int64            `json:"outputTokens"`
-	ReasoningTokens     int64            `json:"reasoningTokens"`
-	CachedTokens        int64            `json:"cachedTokens"`
-	CacheReadTokens     int64            `json:"cacheReadTokens"`
-	CacheCreationTokens int64            `json:"cacheCreationTokens"`
-	HasPrevious         bool             `json:"hasPrevious"`
-	Previous            *OverviewCompare `json:"previous"`
+	Requests                 int64            `json:"requests"`
+	Tokens                   int64            `json:"tokens"`
+	Cost                     *float64         `json:"cost"`
+	Failed                   int64            `json:"failed"`
+	InputTokens              int64            `json:"inputTokens"`
+	UncachedInputTokens      int64            `json:"uncachedInputTokens"`
+	OutputTokens             int64            `json:"outputTokens"`
+	ReasoningTokens          int64            `json:"reasoningTokens"`
+	CachedTokens             int64            `json:"cachedTokens"`
+	CacheReadTokens          int64            `json:"cacheReadTokens"`
+	CanonicalCacheReadTokens int64            `json:"canonicalCacheReadTokens"`
+	CacheCreationTokens      int64            `json:"cacheCreationTokens"`
+	HasPrevious              bool             `json:"hasPrevious"`
+	Previous                 *OverviewCompare `json:"previous"`
 }
 
 // OverviewCompare 上一等长周期的可比指标（仅四个 KPI 维度，不含 token 拆分）。
@@ -109,35 +118,39 @@ type OverviewCompare struct {
 
 // AccountUsage 账号用量榜一行（核心模块）。同样透出 token 拆分。
 type AccountUsage struct {
-	Source              string   `json:"source"`
-	Requests            int64    `json:"requests"`
-	Tokens              int64    `json:"tokens"`
-	Cost                *float64 `json:"cost"`
-	Failed              int64    `json:"failed"`
-	InputTokens         int64    `json:"inputTokens"`
-	OutputTokens        int64    `json:"outputTokens"`
-	ReasoningTokens     int64    `json:"reasoningTokens"`
-	CachedTokens        int64    `json:"cachedTokens"`
-	CacheReadTokens     int64    `json:"cacheReadTokens"`
-	CacheCreationTokens int64    `json:"cacheCreationTokens"`
+	Source                   string   `json:"source"`
+	Requests                 int64    `json:"requests"`
+	Tokens                   int64    `json:"tokens"`
+	Cost                     *float64 `json:"cost"`
+	Failed                   int64    `json:"failed"`
+	InputTokens              int64    `json:"inputTokens"`
+	UncachedInputTokens      int64    `json:"uncachedInputTokens"`
+	OutputTokens             int64    `json:"outputTokens"`
+	ReasoningTokens          int64    `json:"reasoningTokens"`
+	CachedTokens             int64    `json:"cachedTokens"`
+	CacheReadTokens          int64    `json:"cacheReadTokens"`
+	CanonicalCacheReadTokens int64    `json:"canonicalCacheReadTokens"`
+	CacheCreationTokens      int64    `json:"cacheCreationTokens"`
 }
 
 // KeyUsage API key 用量榜一行（与账号榜并列的独立维度，按脱敏 key 聚合）。
 // Fingerprint 为聚合主键（前端唯一标识/做 React key）；KeyMask 供界面展示（如 sk-…2216）。
 // 指标口径（请求/失败/token 拆分/成本）与 AccountUsage 完全对齐（DRY）。
 type KeyUsage struct {
-	Fingerprint         string   `json:"fingerprint"`
-	KeyMask             string   `json:"keyMask"`
-	Requests            int64    `json:"requests"`
-	Tokens              int64    `json:"tokens"`
-	Cost                *float64 `json:"cost"`
-	Failed              int64    `json:"failed"`
-	InputTokens         int64    `json:"inputTokens"`
-	OutputTokens        int64    `json:"outputTokens"`
-	ReasoningTokens     int64    `json:"reasoningTokens"`
-	CachedTokens        int64    `json:"cachedTokens"`
-	CacheReadTokens     int64    `json:"cacheReadTokens"`
-	CacheCreationTokens int64    `json:"cacheCreationTokens"`
+	Fingerprint              string   `json:"fingerprint"`
+	KeyMask                  string   `json:"keyMask"`
+	Requests                 int64    `json:"requests"`
+	Tokens                   int64    `json:"tokens"`
+	Cost                     *float64 `json:"cost"`
+	Failed                   int64    `json:"failed"`
+	InputTokens              int64    `json:"inputTokens"`
+	UncachedInputTokens      int64    `json:"uncachedInputTokens"`
+	OutputTokens             int64    `json:"outputTokens"`
+	ReasoningTokens          int64    `json:"reasoningTokens"`
+	CachedTokens             int64    `json:"cachedTokens"`
+	CacheReadTokens          int64    `json:"cacheReadTokens"`
+	CanonicalCacheReadTokens int64    `json:"canonicalCacheReadTokens"`
+	CacheCreationTokens      int64    `json:"cacheCreationTokens"`
 }
 
 // TrendPoint 每日趋势一个点（Date 为按配置时区的 YYYY-MM-DD）。

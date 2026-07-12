@@ -4,7 +4,7 @@ import { formatInt } from '@/lib/format'
 import type { Overview } from '../../types'
 
 // Token 构成条：输入 / 缓存读 / 缓存写 / 输出 四段水平占比 + 图例带数值。
-// 四段经 tokenSegments 跨 provider 归一化（OpenAI 的 cachedTokens 计入缓存读）；
+// 四段经 tokenSegments 使用后端 provider-aware 的 canonical token 口径；
 // 分母用四段之和（= totalTokens），与 design-system / mockup 一致。
 export default function TokenComposition({ overview, loading }: { overview: Overview; loading: boolean }) {
   const segments = tokenSegments(overview)

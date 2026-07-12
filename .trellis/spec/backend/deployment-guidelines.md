@@ -91,3 +91,62 @@ services:
 ```
 
 Keep the default deployment small and expose backend direct access only when the operator explicitly opts into debugging.
+
+## Scenario: Breaking Daily Primary-Key Migration
+
+### 1. Scope / Trigger
+
+- Trigger: any migration that changes the columns used by rollup's
+  `ON CONFLICT` target, including the long-context five-column daily key.
+
+### 2. Signatures
+
+```text
+old key: (usage_date, source, model, key_fingerprint)
+new key: (usage_date, source, model, key_fingerprint, long_context)
+```
+
+### 3. Contracts
+
+- Stop the old Lens collector before changing the key.
+- Apply the idempotent migration before starting the matching new binary.
+- Start the new binary with `COLLECTOR_ENABLED=false` long enough to refresh
+  price metadata, then re-enable the collector.
+- This binary/schema boundary is independent of the CPA payload version.
+
+### 4. Validation & Error Matrix
+
+- Old binary + new key -> rollup conflict inference fails continuously.
+- New binary + old key -> five-column conflict inference fails continuously.
+- Directly dropping `long_context` during rollback -> may produce duplicate old
+  keys when both base/long rows exist.
+- Collector outage beyond CPA queue retention -> source events expire.
+
+### 5. Good / Base / Bad Cases
+
+- Good: stop -> migrate -> deploy read-only -> refresh price -> enable collector.
+- Base: fresh install runs all migrations before first start.
+- Bad: migrate while the old collector is still running.
+- Bad: start an old binary against the five-column key during rollback.
+
+### 6. Tests Required
+
+- Run the migration twice against disposable PostgreSQL.
+- Verify existing rows become `long_context=false`.
+- Verify exact-threshold and above-threshold rows coexist under the new key.
+- Verify deployment docs include upgrade order and rollback limits in English
+  and Chinese.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```text
+deploy old binary -> migrate live database -> hope rolling restart converges
+```
+
+#### Correct
+
+```text
+stop old collector -> migrate -> deploy matching new binary -> enable collector
+```
