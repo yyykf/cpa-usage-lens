@@ -253,6 +253,67 @@ func TestToEvent_BadTimestamp(t *testing.T) {
 	}
 }
 
+func TestToEvent_CodexCPA7267CacheReadAliasesNormalizeOnce(t *testing.T) {
+	raw := rawQueueItem{
+		Timestamp: "2026-07-12T12:00:00+08:00",
+		Provider:  "codex",
+		Model:     "gpt-5.6-sol",
+		RequestID: "req-cache-alias",
+		Tokens: rawTokens{
+			Input: 100, Output: 20, Cached: 30, CacheRead: 30, CacheCreation: 40, Total: 120,
+		},
+	}
+	ev, ok := toEvent(raw)
+	if !ok {
+		t.Fatal("expected event")
+	}
+	if ev.Tokens.Cached != 30 || ev.Tokens.CacheRead != 0 {
+		t.Errorf("canonical cache read = (cached:%d read:%d), want (30,0)", ev.Tokens.Cached, ev.Tokens.CacheRead)
+	}
+	if ev.Tokens.CacheCreation != 40 || ev.Tokens.Input != 100 {
+		t.Errorf("unrelated token fields changed: %+v", ev.Tokens)
+	}
+}
+
+func TestToEvent_CodexOldCPAMissingNewAliasesRemainsCompatible(t *testing.T) {
+	raw := rawQueueItem{
+		Timestamp: "2026-07-12T12:00:00+08:00",
+		Provider:  "codex",
+		Model:     "gpt-5.5",
+		RequestID: "req-old-cpa",
+		Tokens:    rawTokens{Input: 100, Output: 20, Cached: 30, Total: 120},
+	}
+	ev, ok := toEvent(raw)
+	if !ok {
+		t.Fatal("expected event")
+	}
+	if ev.Tokens.Cached != 30 || ev.Tokens.CacheRead != 0 || ev.Tokens.CacheCreation != 0 {
+		t.Errorf("old CPA token shape changed or invented fields: %+v", ev.Tokens)
+	}
+}
+
+func TestToEvent_ClaudeCPA7267AliasesKeepIndependentCacheCounters(t *testing.T) {
+	raw := rawQueueItem{
+		Timestamp: "2026-07-12T12:00:00+08:00",
+		Provider:  "claude",
+		Model:     "claude-sonnet",
+		RequestID: "req-claude-cache",
+		Tokens: rawTokens{
+			Input: 2000, Output: 300, Cached: 1000, CacheRead: 1000, CacheCreation: 500, Total: 3800,
+		},
+	}
+	ev, ok := toEvent(raw)
+	if !ok {
+		t.Fatal("expected event")
+	}
+	if ev.Tokens.Cached != 0 || ev.Tokens.CacheRead != 1000 || ev.Tokens.CacheCreation != 500 {
+		t.Errorf("canonical Claude cache tokens = %+v, want cached=0 read=1000 creation=500", ev.Tokens)
+	}
+	if ev.Tokens.Input != 2000 {
+		t.Errorf("Claude input = %d, want unchanged 2000", ev.Tokens.Input)
+	}
+}
+
 func TestFlexString_HexStringAndNumber(t *testing.T) {
 	// 回归：CPA v7.1.31 的 auth_index 是 hex hash，不能当数字解析（否则整批丢数据）
 	var a flexString

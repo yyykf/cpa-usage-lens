@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/cost-calculation.md","reason":"Verify cleanup preserves every documented pricing and compatibility contract."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Verify accepted abstractions reduce real duplication rather than add indirection."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify DTO and token fields remain consistent across all modified layers."}

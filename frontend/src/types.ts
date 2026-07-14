@@ -1,12 +1,14 @@
 // 与后端 internal/model DTO 严格对齐（JSON 字段名一致，camelCase）。
 
-// token 拆分字段（后端在 overview / accounts 上新增的 6 个 int64）。
+// token 拆分字段：保留 CPA 原始统计，并额外提供 provider-aware 的展示口径。
 export interface TokenBreakdown {
   inputTokens: number
+  uncachedInputTokens: number
   outputTokens: number
   reasoningTokens: number
   cachedTokens: number
   cacheReadTokens: number
+  canonicalCacheReadTokens: number
   cacheCreationTokens: number
 }
 

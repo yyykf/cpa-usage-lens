@@ -15,17 +15,34 @@ func (d *DB) UpsertPrices(ctx context.Context, prices []model.ModelPrice) error 
 	batch := &pgx.Batch{}
 	for _, p := range prices {
 		batch.Queue(`
-INSERT INTO model_prices (model, input_cost_per_token, output_cost_per_token, cache_read_cost_per_token, cache_creation_cost_per_token, currency, source, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7, now())
+INSERT INTO model_prices (
+  model, provider,
+  input_cost_per_token, output_cost_per_token, cache_read_cost_per_token, cache_creation_cost_per_token,
+  long_context_threshold_tokens,
+  long_context_input_cost_per_token, long_context_output_cost_per_token,
+  long_context_cache_read_cost_per_token, long_context_cache_creation_cost_per_token,
+  currency, source, updated_at
+)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())
 ON CONFLICT (model) DO UPDATE SET
+  provider                      = EXCLUDED.provider,
   input_cost_per_token          = EXCLUDED.input_cost_per_token,
   output_cost_per_token         = EXCLUDED.output_cost_per_token,
   cache_read_cost_per_token     = EXCLUDED.cache_read_cost_per_token,
   cache_creation_cost_per_token = EXCLUDED.cache_creation_cost_per_token,
+  long_context_threshold_tokens              = EXCLUDED.long_context_threshold_tokens,
+  long_context_input_cost_per_token          = EXCLUDED.long_context_input_cost_per_token,
+  long_context_output_cost_per_token         = EXCLUDED.long_context_output_cost_per_token,
+  long_context_cache_read_cost_per_token     = EXCLUDED.long_context_cache_read_cost_per_token,
+  long_context_cache_creation_cost_per_token = EXCLUDED.long_context_cache_creation_cost_per_token,
   currency                      = EXCLUDED.currency,
   source                        = EXCLUDED.source,
   updated_at                    = now()`,
-			p.Model, p.InputCostPerToken, p.OutputCostPerToken, p.CacheReadCostPerToken, p.CacheCreationCostPerToken,
+			p.Model, p.Provider,
+			p.InputCostPerToken, p.OutputCostPerToken, p.CacheReadCostPerToken, p.CacheCreationCostPerToken,
+			p.LongContextThresholdTokens,
+			p.LongContextInputCostPerToken, p.LongContextOutputCostPerToken,
+			p.LongContextCacheReadCostPerToken, p.LongContextCacheCreationCostPerToken,
 			defaultStr(p.Currency, "USD"), defaultStr(p.Source, "litellm"))
 	}
 	br := d.Pool.SendBatch(ctx, batch)
@@ -41,9 +58,12 @@ ON CONFLICT (model) DO UPDATE SET
 // GetPriceMap 读取所有价格 → map[model]ModelPrice（numeric cast 成 float8 便于 scan）。
 func (d *DB) GetPriceMap(ctx context.Context) (map[string]model.ModelPrice, error) {
 	rows, err := d.Pool.Query(ctx, `
-SELECT model,
+SELECT model, provider,
        input_cost_per_token::float8, output_cost_per_token::float8,
        cache_read_cost_per_token::float8, cache_creation_cost_per_token::float8,
+       long_context_threshold_tokens,
+       long_context_input_cost_per_token::float8, long_context_output_cost_per_token::float8,
+       long_context_cache_read_cost_per_token::float8, long_context_cache_creation_cost_per_token::float8,
        currency, source, updated_at
 FROM model_prices`)
 	if err != nil {
@@ -54,8 +74,12 @@ FROM model_prices`)
 	out := make(map[string]model.ModelPrice)
 	for rows.Next() {
 		var p model.ModelPrice
-		if err := rows.Scan(&p.Model, &p.InputCostPerToken, &p.OutputCostPerToken,
-			&p.CacheReadCostPerToken, &p.CacheCreationCostPerToken, &p.Currency, &p.Source, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.Model, &p.Provider, &p.InputCostPerToken, &p.OutputCostPerToken,
+			&p.CacheReadCostPerToken, &p.CacheCreationCostPerToken,
+			&p.LongContextThresholdTokens,
+			&p.LongContextInputCostPerToken, &p.LongContextOutputCostPerToken,
+			&p.LongContextCacheReadCostPerToken, &p.LongContextCacheCreationCostPerToken,
+			&p.Currency, &p.Source, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out[p.Model] = p
