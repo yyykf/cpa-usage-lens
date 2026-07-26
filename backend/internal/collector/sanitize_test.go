@@ -314,6 +314,50 @@ func TestToEvent_ClaudeCPA7267AliasesKeepIndependentCacheCounters(t *testing.T) 
 	}
 }
 
+func TestToEvent_CPA7297CanonicalAccountingComplete(t *testing.T) {
+	raw := rawQueueItem{Timestamp: "2026-07-26T12:00:00+08:00", Provider: "codex", RequestID: "v2-complete",
+		AccountingVersion: 2, TokenBreakdown: &rawTokenBreakdown{SchemaVersion: 2, Quality: "complete", TotalTokens: 120,
+			Input:  rawInputBreakdown{TotalTokens: 100, UncachedTokens: 60, CacheReadTokens: 30, CacheWriteTokens: 10},
+			Output: rawOutputBreakdown{TotalTokens: 20, NonReasoningTokens: 5, ReasoningTokens: 15}}}
+	ev, ok := toEvent(raw)
+	if !ok || ev.Accounting.Version != 2 || ev.Accounting.Quality != "complete" {
+		t.Fatalf("canonical accounting not retained: ok=%v accounting=%+v", ok, ev.Accounting)
+	}
+	want := model.CanonicalTokens{UncachedInput: 60, CacheRead: 30, CacheCreation: 10, NonReasoningOutput: 5, Reasoning: 15, Total: 120}
+	if ev.Accounting.Tokens != want {
+		t.Fatalf("canonical tokens = %+v, want %+v", ev.Accounting.Tokens, want)
+	}
+}
+
+func TestToEvent_CPA7297UnclassifiedAndInvalidFallback(t *testing.T) {
+	valid := rawQueueItem{Timestamp: "2026-07-26T12:00:00+08:00", Provider: "unknown", RequestID: "v2-partial",
+		AccountingVersion: 2, TokenBreakdown: &rawTokenBreakdown{SchemaVersion: 2, Quality: "unclassified", TotalTokens: 120,
+			Input:  rawInputBreakdown{TotalTokens: 80, UncachedTokens: 80},
+			Output: rawOutputBreakdown{TotalTokens: 20, NonReasoningTokens: 20}, UnclassifiedTokens: 20}}
+	ev, ok := toEvent(valid)
+	if !ok || ev.Accounting.Quality != "unclassified" || ev.Accounting.Tokens.Unclassified != 20 {
+		t.Fatalf("unclassified accounting lost: ok=%v accounting=%+v", ok, ev.Accounting)
+	}
+
+	invalid := valid
+	invalid.RequestID = "v2-invalid"
+	invalid.Tokens = rawTokens{Input: 10, Output: 2, Total: 12}
+	invalid.TokenBreakdown.Input.UncachedTokens = 81
+	ev, ok = toEvent(invalid)
+	if !ok || ev.Accounting.Version != 2 || ev.Accounting.Quality != "inconsistent" || ev.Accounting.Tokens.Unclassified != 120 {
+		t.Fatalf("invalid v2 must be quarantined as inconsistent: ok=%v accounting=%+v", ok, ev.Accounting)
+	}
+}
+
+func TestCanonicalAccountingRejectsOverflow(t *testing.T) {
+	maxInt64 := int64(^uint64(0) >> 1)
+	_, ok := canonicalAccounting(rawTokenBreakdown{SchemaVersion: 2, Quality: "complete", TotalTokens: maxInt64,
+		Input: rawInputBreakdown{TotalTokens: maxInt64, UncachedTokens: maxInt64, CacheReadTokens: 1}})
+	if ok {
+		t.Fatal("overflowing canonical buckets must be rejected")
+	}
+}
+
 func TestFlexString_HexStringAndNumber(t *testing.T) {
 	// 回归：CPA v7.1.31 的 auth_index 是 hex hash，不能当数字解析（否则整批丢数据）
 	var a flexString

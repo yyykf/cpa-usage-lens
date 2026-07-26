@@ -15,6 +15,8 @@ func TestTokenBreakdownDTOsMarshalFlat(t *testing.T) {
 		CacheReadTokens:          6,
 		CanonicalCacheReadTokens: 7,
 		CacheCreationTokens:      8,
+		NonReasoningOutputTokens: 9,
+		UnclassifiedTokens:       10,
 	}
 	breakdownJSON := map[string]any{
 		"inputTokens":              1.0,
@@ -25,27 +27,31 @@ func TestTokenBreakdownDTOsMarshalFlat(t *testing.T) {
 		"cacheReadTokens":          6.0,
 		"canonicalCacheReadTokens": 7.0,
 		"cacheCreationTokens":      8.0,
+		"nonReasoningOutputTokens": 9.0,
+		"unclassifiedTokens":       10.0,
 	}
+	qualityJSON := map[string]any{"costCoverage": "", "completeRequests": 0.0,
+		"unclassifiedRequests": 0.0, "inconsistentRequests": 0.0, "legacyRequests": 0.0}
 	tests := map[string]struct {
 		dto  any
 		want map[string]any
 	}{
 		"overview": {
 			dto: Overview{Requests: 9, Tokens: 10, Failed: 11, TokenBreakdown: breakdown, HasPrevious: true},
-			want: mergeJSONFields(breakdownJSON, map[string]any{
+			want: mergeJSONFields(breakdownJSON, qualityJSON, map[string]any{
 				"requests": 9.0, "tokens": 10.0, "cost": nil, "failed": 11.0,
 				"hasPrevious": true, "previous": nil,
 			}),
 		},
 		"account": {
 			dto: AccountUsage{Source: "account", Requests: 9, Tokens: 10, Failed: 11, TokenBreakdown: breakdown},
-			want: mergeJSONFields(breakdownJSON, map[string]any{
+			want: mergeJSONFields(breakdownJSON, qualityJSON, map[string]any{
 				"source": "account", "requests": 9.0, "tokens": 10.0, "cost": nil, "failed": 11.0,
 			}),
 		},
 		"key": {
 			dto: KeyUsage{Fingerprint: "fingerprint", KeyMask: "mask", Requests: 9, Tokens: 10, Failed: 11, TokenBreakdown: breakdown},
-			want: mergeJSONFields(breakdownJSON, map[string]any{
+			want: mergeJSONFields(breakdownJSON, qualityJSON, map[string]any{
 				"fingerprint": "fingerprint", "keyMask": "mask", "requests": 9.0,
 				"tokens": 10.0, "cost": nil, "failed": 11.0,
 			}),
@@ -92,6 +98,7 @@ func TestTokenBreakdownDTOZeroValuesRemainVisible(t *testing.T) {
 			for _, field := range []string{
 				"inputTokens", "uncachedInputTokens", "outputTokens", "reasoningTokens",
 				"cachedTokens", "cacheReadTokens", "canonicalCacheReadTokens", "cacheCreationTokens",
+				"nonReasoningOutputTokens", "unclassifiedTokens",
 			} {
 				if value, ok := got[field]; !ok || value != float64(0) {
 					t.Errorf("zero field %s = %v (present=%v); JSON=%s", field, value, ok, data)

@@ -53,6 +53,30 @@ func TestBuildOverview_MissingPriceMeansUnknownCost(t *testing.T) {
 	}
 }
 
+func TestBuildOverview_PartialAccountingKeepsKnownCost(t *testing.T) {
+	day := time.Date(2026, 7, 26, 0, 0, 0, 0, time.UTC)
+	rows := []model.DailyUsage{{UsageDate: day, Model: "gpt", Requests: 2,
+		Tokens: model.Tokens{Total: 120}, Accounting: model.AccountingRollup{
+			Tokens:           model.CanonicalTokens{UncachedInput: 80, NonReasoningOutput: 20, Unclassified: 20},
+			CompleteRequests: 1, UnclassifiedRequests: 1}}}
+	o := BuildOverview(rows, map[string]model.ModelPrice{"gpt": {Provider: "openai", InputCostPerToken: fp(1), OutputCostPerToken: fp(2)}})
+	if o.Cost == nil || *o.Cost != 120 || o.CostCoverage != "partial" || o.UnclassifiedTokens != 20 {
+		t.Fatalf("partial accounting = %+v, want known classified cost and warning", o)
+	}
+	if o.NonReasoningOutputTokens != 20 || o.ReasoningTokens != 0 {
+		t.Fatalf("canonical output buckets lost: %+v", o.TokenBreakdown)
+	}
+}
+
+func TestBuildOverview_AllUnclassifiedCostUnknown(t *testing.T) {
+	rows := []model.DailyUsage{{Model: "gpt", Requests: 1, Tokens: model.Tokens{Total: 42},
+		Accounting: model.AccountingRollup{Tokens: model.CanonicalTokens{Unclassified: 42}, UnclassifiedRequests: 1}}}
+	o := BuildOverview(rows, map[string]model.ModelPrice{"gpt": {Provider: "openai", InputCostPerToken: fp(1), OutputCostPerToken: fp(2)}})
+	if o.Cost != nil || o.CostCoverage != "unknown" || o.Tokens != 42 {
+		t.Fatalf("all-unclassified overview = %+v", o)
+	}
+}
+
 func TestBuildOverview_MixedLongContextRowsPricePerTierThenAggregate(t *testing.T) {
 	day := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
 	rows := []model.DailyUsage{

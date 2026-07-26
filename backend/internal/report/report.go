@@ -9,7 +9,8 @@ import (
 )
 
 type aggregateTokens struct {
-	total, input, uncachedInput, output, reasoning, cached, cacheRead, canonicalCacheRead, cacheCreation int64
+	total, input, uncachedInput, output, nonReasoningOutput, reasoning, cached, cacheRead, canonicalCacheRead, cacheCreation, unclassified int64
+	completeRequests, unclassifiedRequests, inconsistentRequests, legacyRequests                                                           int64
 }
 
 type costAccumulator struct {
@@ -26,7 +27,14 @@ func (a *costAccumulator) add(row model.DailyUsage, price model.ModelPrice, pric
 		a.known = false
 		return
 	}
-	cost, costKnown := pricing.CostAtTier(row.Tokens, price, row.LongContext)
+	accounting := accountingForRow(row, price.Provider)
+	var cost float64
+	var costKnown bool
+	if accounting.LegacyRequests == row.Requests {
+		cost, costKnown = pricing.CostAtTier(row.Tokens, price, row.LongContext)
+	} else {
+		cost, costKnown = pricing.CostCanonicalAtTier(accounting.Tokens, price, row.LongContext)
+	}
 	if !costKnown {
 		a.known = false
 		return
@@ -34,17 +42,23 @@ func (a *costAccumulator) add(row model.DailyUsage, price model.ModelPrice, pric
 	a.total += cost
 }
 
-func (a *aggregateTokens) add(tokens model.Tokens, provider string) {
-	split := pricing.SplitInputTokens(tokens, provider)
-	a.total += tokens.Total
-	a.input += tokens.Input
-	a.uncachedInput += split.Uncached
-	a.output += tokens.Output
-	a.reasoning += tokens.Reasoning
-	a.cached += tokens.Cached
-	a.cacheRead += tokens.CacheRead
-	a.canonicalCacheRead += split.CacheRead
-	a.cacheCreation += split.CacheCreation
+func (a *aggregateTokens) add(row model.DailyUsage, provider string) {
+	accounting := accountingForRow(row, provider)
+	a.total += row.Tokens.Total
+	a.input += row.Tokens.Input
+	a.uncachedInput += accounting.Tokens.UncachedInput
+	a.output += row.Tokens.Output
+	a.nonReasoningOutput += accounting.Tokens.NonReasoningOutput
+	a.reasoning += accounting.Tokens.Reasoning
+	a.cached += row.Tokens.Cached
+	a.cacheRead += row.Tokens.CacheRead
+	a.canonicalCacheRead += accounting.Tokens.CacheRead
+	a.cacheCreation += accounting.Tokens.CacheCreation
+	a.unclassified += accounting.Tokens.Unclassified
+	a.completeRequests += accounting.CompleteRequests
+	a.unclassifiedRequests += accounting.UnclassifiedRequests
+	a.inconsistentRequests += accounting.InconsistentRequests
+	a.legacyRequests += accounting.LegacyRequests
 }
 
 func (a aggregateTokens) breakdown() model.TokenBreakdown {
@@ -57,7 +71,39 @@ func (a aggregateTokens) breakdown() model.TokenBreakdown {
 		CacheReadTokens:          a.cacheRead,
 		CanonicalCacheReadTokens: a.canonicalCacheRead,
 		CacheCreationTokens:      a.cacheCreation,
+		NonReasoningOutputTokens: a.nonReasoningOutput,
+		UnclassifiedTokens:       a.unclassified,
 	}
+}
+
+func (a aggregateTokens) quality() model.AccountingQualitySummary {
+	coverage := "complete"
+	if a.unclassifiedRequests > 0 || a.inconsistentRequests > 0 {
+		if a.total-a.unclassified > 0 {
+			coverage = "partial"
+		} else {
+			coverage = "unknown"
+		}
+	}
+	return model.AccountingQualitySummary{CostCoverage: coverage, CompleteRequests: a.completeRequests,
+		UnclassifiedRequests: a.unclassifiedRequests, InconsistentRequests: a.inconsistentRequests,
+		LegacyRequests: a.legacyRequests}
+}
+
+func accountingForRow(row model.DailyUsage, provider string) model.AccountingRollup {
+	a := row.Accounting
+	if a.CompleteRequests+a.UnclassifiedRequests+a.InconsistentRequests > 0 {
+		a.Tokens.Total = a.Tokens.UncachedInput + a.Tokens.CacheRead + a.Tokens.CacheCreation +
+			a.Tokens.NonReasoningOutput + a.Tokens.Reasoning + a.Tokens.Unclassified
+		return a
+	}
+	split := pricing.SplitInputTokens(row.Tokens, provider)
+	nonReasoning := max(row.Tokens.Output-row.Tokens.Reasoning, 0)
+	a.Tokens = model.CanonicalTokens{UncachedInput: split.Uncached, CacheRead: split.CacheRead,
+		CacheCreation: split.CacheCreation, NonReasoningOutput: nonReasoning, Reasoning: row.Tokens.Reasoning}
+	a.Tokens.Total = row.Tokens.Total
+	a.CompleteRequests, a.LegacyRequests = row.Requests, row.Requests
+	return a
 }
 
 // aggCost 累加一组按 model 的用量成本；任一行缺价或缺价格则整体成本标记未知（返回 known=false）。
@@ -77,12 +123,15 @@ func BuildOverview(rows []model.DailyUsage, prices map[string]model.ModelPrice) 
 	for _, r := range rows {
 		o.Requests += r.Requests
 		o.Failed += r.FailedRequests
-		tokens.add(r.Tokens, prices[r.Model].Provider)
+		tokens.add(r, prices[r.Model].Provider)
 	}
 	o.Tokens = tokens.total
 	o.TokenBreakdown = tokens.breakdown()
-	if c, known := aggCost(rows, prices); known {
+	o.AccountingQualitySummary = tokens.quality()
+	if c, known := aggCost(rows, prices); known && o.CostCoverage != "unknown" {
 		o.Cost = &c
+	} else if !known {
+		o.CostCoverage = "unknown"
 	}
 	return o
 }
@@ -126,7 +175,7 @@ func BuildAccounts(rows []model.DailyUsage, prices map[string]model.ModelPrice) 
 		a.requests += r.Requests
 		a.failed += r.FailedRequests
 		price, priceKnown := prices[r.Model]
-		a.tokens.add(r.Tokens, price.Provider)
+		a.tokens.add(r, price.Provider)
 		a.cost.add(r, price, priceKnown)
 	}
 	out := make([]model.AccountUsage, 0, len(order))
@@ -134,10 +183,13 @@ func BuildAccounts(rows []model.DailyUsage, prices map[string]model.ModelPrice) 
 		a := m[s]
 		au := model.AccountUsage{
 			Source: s, Requests: a.requests, Tokens: a.tokens.total, Failed: a.failed,
-			TokenBreakdown: a.tokens.breakdown(),
+			TokenBreakdown:           a.tokens.breakdown(),
+			AccountingQualitySummary: a.tokens.quality(),
 		}
-		if a.cost.known {
+		if a.cost.known && au.CostCoverage != "unknown" {
 			au.Cost = &a.cost.total
+		} else if !a.cost.known {
+			au.CostCoverage = "unknown"
 		}
 		out = append(out, au)
 	}
@@ -169,7 +221,7 @@ func BuildKeys(rows []model.DailyUsage, prices map[string]model.ModelPrice) []mo
 		a.requests += r.Requests
 		a.failed += r.FailedRequests
 		price, priceKnown := prices[r.Model]
-		a.tokens.add(r.Tokens, price.Provider)
+		a.tokens.add(r, price.Provider)
 		a.cost.add(r, price, priceKnown)
 	}
 	out := make([]model.KeyUsage, 0, len(order))
@@ -181,10 +233,13 @@ func BuildKeys(rows []model.DailyUsage, prices map[string]model.ModelPrice) []mo
 		}
 		ku := model.KeyUsage{
 			Fingerprint: fp, KeyMask: mask, Requests: a.requests, Tokens: a.tokens.total, Failed: a.failed,
-			TokenBreakdown: a.tokens.breakdown(),
+			TokenBreakdown:           a.tokens.breakdown(),
+			AccountingQualitySummary: a.tokens.quality(),
 		}
-		if a.cost.known {
+		if a.cost.known && ku.CostCoverage != "unknown" {
 			ku.Cost = &a.cost.total
+		} else if !a.cost.known {
+			ku.CostCoverage = "unknown"
 		}
 		out = append(out, ku)
 	}
@@ -215,9 +270,12 @@ func BuildTrend(rows []model.DailyUsage, prices map[string]model.ModelPrice) []m
 	out := make([]model.TrendPoint, 0, len(order))
 	for _, k := range order {
 		d := m[k]
-		tp := model.TrendPoint{Date: k, Requests: d.requests, Tokens: d.tokens, Failed: d.failed}
-		if c, known := aggCost(d.rows, prices); known {
+		quality := qualityForRows(d.rows, prices)
+		tp := model.TrendPoint{Date: k, Requests: d.requests, Tokens: d.tokens, Failed: d.failed, CostCoverage: quality.CostCoverage}
+		if c, known := aggCost(d.rows, prices); known && quality.CostCoverage != "unknown" {
 			tp.Cost = &c
+		} else if !known {
+			tp.CostCoverage = "unknown"
 		}
 		out = append(out, tp)
 	}
@@ -266,9 +324,12 @@ func BuildModelBreakdown(rows []model.DailyUsage, prices map[string]model.ModelP
 	// Ranking：逐模型算成本，按 metric 口径降序（token 口径直接复用 models 的顺序）。
 	ranking := make([]model.ModelRankItem, 0, len(models))
 	for _, name := range models {
-		item := model.ModelRankItem{Model: name, Tokens: modelTotal[name]}
-		if cost, known := aggCost(modelRows[name], prices); known {
+		quality := qualityForRows(modelRows[name], prices)
+		item := model.ModelRankItem{Model: name, Tokens: modelTotal[name], CostCoverage: quality.CostCoverage}
+		if cost, known := aggCost(modelRows[name], prices); known && quality.CostCoverage != "unknown" {
 			item.Cost = &cost
+		} else if !known {
+			item.CostCoverage = "unknown"
 		}
 		ranking = append(ranking, item)
 	}
@@ -298,6 +359,14 @@ func BuildModelBreakdown(rows []model.DailyUsage, prices map[string]model.ModelP
 		daily = append(daily, model.ModelDailyPoint{Date: date, Tokens: dayTokens[date]})
 	}
 	return model.ModelBreakdown{Models: models, Daily: daily, Ranking: ranking, Metric: metric}
+}
+
+func qualityForRows(rows []model.DailyUsage, prices map[string]model.ModelPrice) model.AccountingQualitySummary {
+	var tokens aggregateTokens
+	for _, row := range rows {
+		tokens.add(row, prices[row.Model].Provider)
+	}
+	return tokens.quality()
 }
 
 // costSortKey 把 *float64 成本映射为排序用数值：nil(未知) 取 -1 排到末尾，

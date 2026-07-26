@@ -6,24 +6,48 @@ import "encoding/json"
 // 含敏感/大字段（api_key、response_headers、fail.body），仅用于解析；
 // 由 toEvent 转成精简明细时丢弃这些字段，绝不入库。
 type rawQueueItem struct {
-	Timestamp       string          `json:"timestamp"`
-	LatencyMs       *int32          `json:"latency_ms"`
-	TTFTMs          *int32          `json:"ttft_ms"`
-	Source          string          `json:"source"`
-	AuthIndex       flexString      `json:"auth_index"`
-	Tokens          rawTokens       `json:"tokens"`
-	Failed          bool            `json:"failed"`
-	Fail            *rawFail        `json:"fail"`
-	Provider        string          `json:"provider"`
-	Model           string          `json:"model"`
-	Alias           string          `json:"alias"`
-	Endpoint        string          `json:"endpoint"`
-	AuthType        string          `json:"auth_type"`
-	APIKey          string          `json:"api_key"` // 敏感：剥离，不入库
-	RequestID       string          `json:"request_id"`
-	ReasoningEffort string          `json:"reasoning_effort"`
-	ServiceTier     string          `json:"service_tier"`
-	ResponseHeaders json.RawMessage `json:"response_headers"` // 大+敏感：剥离，不入库
+	Timestamp         string             `json:"timestamp"`
+	LatencyMs         *int32             `json:"latency_ms"`
+	TTFTMs            *int32             `json:"ttft_ms"`
+	Source            string             `json:"source"`
+	AuthIndex         flexString         `json:"auth_index"`
+	Tokens            rawTokens          `json:"tokens"`
+	AccountingVersion int                `json:"accounting_version"`
+	TokenBreakdown    *rawTokenBreakdown `json:"token_breakdown"`
+	Failed            bool               `json:"failed"`
+	Fail              *rawFail           `json:"fail"`
+	Provider          string             `json:"provider"`
+	Model             string             `json:"model"`
+	Alias             string             `json:"alias"`
+	Endpoint          string             `json:"endpoint"`
+	AuthType          string             `json:"auth_type"`
+	APIKey            string             `json:"api_key"` // 敏感：剥离，不入库
+	RequestID         string             `json:"request_id"`
+	ReasoningEffort   string             `json:"reasoning_effort"`
+	ServiceTier       string             `json:"service_tier"`
+	ResponseHeaders   json.RawMessage    `json:"response_headers"` // 大+敏感：剥离，不入库
+}
+
+type rawTokenBreakdown struct {
+	SchemaVersion      int                `json:"schema_version"`
+	Quality            string             `json:"quality"`
+	TotalTokens        int64              `json:"total_tokens"`
+	Input              rawInputBreakdown  `json:"input"`
+	Output             rawOutputBreakdown `json:"output"`
+	UnclassifiedTokens int64              `json:"unclassified_tokens"`
+}
+
+type rawInputBreakdown struct {
+	TotalTokens      int64 `json:"total_tokens"`
+	UncachedTokens   int64 `json:"uncached_tokens"`
+	CacheReadTokens  int64 `json:"cache_read_tokens"`
+	CacheWriteTokens int64 `json:"cache_write_tokens"`
+}
+
+type rawOutputBreakdown struct {
+	TotalTokens        int64 `json:"total_tokens"`
+	NonReasoningTokens int64 `json:"non_reasoning_tokens"`
+	ReasoningTokens    int64 `json:"reasoning_tokens"`
 }
 
 // rawTokens 字段顺序/类型与 model.Tokens 完全一致，便于直接类型转换。

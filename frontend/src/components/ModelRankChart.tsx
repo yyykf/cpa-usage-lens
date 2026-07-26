@@ -89,7 +89,9 @@ export default function ModelRankChart({
               />
             </div>
             <span className="text-right font-num text-[12.5px]">
-              <span className={known ? 'text-foreground' : 'text-faint'}>{figure}</span>
+              <span className={known ? 'text-foreground' : 'text-faint'}>
+                {figure}{metric === 'cost' && it.costCoverage === 'partial' ? ' · 部分' : ''}
+              </span>
               <span className="ml-2 text-faint">{pct}</span>
             </span>
           </div>

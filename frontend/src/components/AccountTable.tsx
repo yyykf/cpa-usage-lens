@@ -79,7 +79,7 @@ export default function AccountTable({ accounts, loading }: { accounts: AccountU
                     {a.cost === null ? (
                       <span className="text-muted-foreground">未知</span>
                     ) : (
-                      <span className="text-[hsl(var(--data-cost))]">{formatCost(a.cost)}</span>
+                      <span className="text-[hsl(var(--data-cost))]">{formatCost(a.cost)}{a.costCoverage === 'partial' ? ' · 部分' : ''}</span>
                     )}
                   </TableCell>
                   <TableCell className="py-3.5 text-right font-num text-[13.5px]">

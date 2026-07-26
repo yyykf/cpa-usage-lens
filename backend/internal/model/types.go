@@ -15,6 +15,33 @@ type Tokens struct {
 	Total         int64 `json:"total_tokens"`
 }
 
+// CanonicalTokens 是互斥的 CPA accounting v2 计费桶；各字段之和等于 Total。
+type CanonicalTokens struct {
+	UncachedInput      int64
+	CacheRead          int64
+	CacheCreation      int64
+	NonReasoningOutput int64
+	Reasoning          int64
+	Unclassified       int64
+	Total              int64
+}
+
+// Accounting 保存一次请求的规范化统计质量。Version=1 表示由 legacy 字段兼容推导。
+type Accounting struct {
+	Version int16
+	Quality string
+	Tokens  CanonicalTokens
+}
+
+// AccountingRollup 保存日聚合中的 canonical buckets 与质量覆盖范围。
+type AccountingRollup struct {
+	Tokens               CanonicalTokens
+	CompleteRequests     int64
+	UnclassifiedRequests int64
+	InconsistentRequests int64
+	LegacyRequests       int64
+}
+
 // UsageEvent 写入 request_events_hot 的一条精简明细
 // （已剥离 api_key / response_headers / fail.body 等敏感或大字段）。
 // KeyFingerprint/KeyMask 为客户端 api_key 的不可逆脱敏形态——明文绝不进本结构、绝不入库。
@@ -31,6 +58,7 @@ type UsageEvent struct {
 	KeyFingerprint  string // sha256(明文 api_key) 全长小写 hex；非 key 认证/空 key 落 'none'
 	KeyMask         string // 展示掩码（前缀…后4位）；非 key 认证/空 key 落 '(no key)'
 	Tokens          Tokens
+	Accounting      Accounting
 	LatencyMs       *int32
 	TTFTMs          *int32
 	Failed          bool
@@ -51,6 +79,7 @@ type DailyUsage struct {
 	Requests       int64
 	FailedRequests int64
 	Tokens         Tokens
+	Accounting     AccountingRollup
 }
 
 // ModelPrice 对应 model_prices 一行（LiteLLM 每 token USD 单价；nil = 缺该项价格）。
@@ -95,6 +124,17 @@ type TokenBreakdown struct {
 	CacheReadTokens          int64 `json:"cacheReadTokens"`
 	CanonicalCacheReadTokens int64 `json:"canonicalCacheReadTokens"`
 	CacheCreationTokens      int64 `json:"cacheCreationTokens"`
+	NonReasoningOutputTokens int64 `json:"nonReasoningOutputTokens"`
+	UnclassifiedTokens       int64 `json:"unclassifiedTokens"`
+}
+
+// AccountingQualitySummary 描述聚合范围内计费覆盖程度。
+type AccountingQualitySummary struct {
+	CostCoverage         string `json:"costCoverage"` // complete | partial | unknown
+	CompleteRequests     int64  `json:"completeRequests"`
+	UnclassifiedRequests int64  `json:"unclassifiedRequests"`
+	InconsistentRequests int64  `json:"inconsistentRequests"`
+	LegacyRequests       int64  `json:"legacyRequests"`
 }
 
 // Overview 顶部总览（周期内汇总）。Cost 为 nil 表示存在缺价模型 → 前端显示"未知"。
@@ -109,6 +149,7 @@ type Overview struct {
 	Cost     *float64 `json:"cost"`
 	Failed   int64    `json:"failed"`
 	TokenBreakdown
+	AccountingQualitySummary
 	HasPrevious bool             `json:"hasPrevious"`
 	Previous    *OverviewCompare `json:"previous"`
 }
@@ -130,6 +171,7 @@ type AccountUsage struct {
 	Cost     *float64 `json:"cost"`
 	Failed   int64    `json:"failed"`
 	TokenBreakdown
+	AccountingQualitySummary
 }
 
 // KeyUsage API key 用量榜一行（与账号榜并列的独立维度，按脱敏 key 聚合）。
@@ -143,15 +185,17 @@ type KeyUsage struct {
 	Cost        *float64 `json:"cost"`
 	Failed      int64    `json:"failed"`
 	TokenBreakdown
+	AccountingQualitySummary
 }
 
 // TrendPoint 每日趋势一个点（Date 为按配置时区的 YYYY-MM-DD）。
 type TrendPoint struct {
-	Date     string   `json:"date"`
-	Requests int64    `json:"requests"`
-	Tokens   int64    `json:"tokens"`
-	Cost     *float64 `json:"cost"`
-	Failed   int64    `json:"failed"`
+	Date         string   `json:"date"`
+	Requests     int64    `json:"requests"`
+	Tokens       int64    `json:"tokens"`
+	Cost         *float64 `json:"cost"`
+	Failed       int64    `json:"failed"`
+	CostCoverage string   `json:"costCoverage"`
 }
 
 // CollectorHealth 采集器健康 + 数据库真实容量（绝对值，不显示百分比）。
@@ -179,9 +223,10 @@ type ModelBreakdown struct {
 // Tokens 始终给（周期内该模型总 token）；Cost 为 nil 表示该模型缺价 → 成本未知。
 // 两个口径的值都返回，前端切换 token/cost 仅改排序与展示，无需二次请求。
 type ModelRankItem struct {
-	Model  string   `json:"model"`
-	Tokens int64    `json:"tokens"`
-	Cost   *float64 `json:"cost"`
+	Model        string   `json:"model"`
+	Tokens       int64    `json:"tokens"`
+	Cost         *float64 `json:"cost"`
+	CostCoverage string   `json:"costCoverage"`
 }
 
 // ModelDailyPoint 模型分布的某一天（按模型透视的 token）。

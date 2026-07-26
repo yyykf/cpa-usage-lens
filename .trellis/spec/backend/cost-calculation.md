@@ -159,3 +159,86 @@ cost += output * outputPrice
 ```
 
 Select the base or long-context price set before applying this shared split.
+
+## Scenario: CPA token accounting v2 quality
+
+### 1. Scope / Trigger
+
+- Trigger: CPA `accounting_version`, canonical buckets, accounting quality, cost coverage, or token-composition changes.
+- CPA v7.2.97+ canonical accounting crosses collector, hot storage, daily rollup, report DTOs, and frontend display.
+
+### 2. Signatures
+
+Queue fields:
+
+```text
+accounting_version: 2
+token_breakdown.schema_version: 2
+token_breakdown.quality: complete | unclassified | inconsistent
+token_breakdown.input: total_tokens, uncached_tokens, cache_read_tokens, cache_write_tokens
+token_breakdown.output: total_tokens, non_reasoning_tokens, reasoning_tokens
+token_breakdown.unclassified_tokens
+```
+
+Report fields include `nonReasoningOutputTokens`, `unclassifiedTokens`,
+`costCoverage`, and request counts for all three quality values plus legacy.
+
+### 3. Contracts
+
+- Validate v2 once at the collector boundary; downstream layers consume the validated canonical shape.
+- Input children equal input total, output children equal output total, and input + output + unclassified equal total.
+- All counters are non-negative and summation must reject int64 overflow.
+- A malformed declared-v2 record is `inconsistent`; never downgrade it to a legacy complete record.
+- Missing v2 fields from an old CPA use the existing provider-aware legacy fallback.
+- Classified buckets may be priced; unclassified tokens are retained but never assigned a guessed price.
+- A mixed range returns the classified cost with `costCoverage=partial`; only a wholly unpriceable range is `unknown`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Valid complete v2 | Store and price all five classified buckets |
+| Valid partial/unclassified v2 | Store total and unclassified; price only classified buckets |
+| Contradictory or overflowing v2 | Mark inconsistent and quarantine total as unclassified |
+| `accounting_version=2` without breakdown | Mark inconsistent |
+| Legacy payload without version | Preserve provider-aware fallback and count as legacy |
+| One bad record mixed with good records | Keep known cost and mark the aggregate partial |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `input=100 (60+30+10)`, `output=20 (5+15)`, total `120`, quality complete.
+- Base: an old CPA payload still produces the same legacy cost and remains visible as legacy coverage.
+- Good: classified `100` plus unclassified `20` displays total `120` and a partial cost for the classified portion.
+- Bad: one inconsistent request turns an otherwise valid 30-day cost into null.
+- Bad: invalid v2 silently falls back to field-shape guessing.
+
+### 6. Tests Required
+
+- Collector fixtures for complete, partial/unclassified, malformed, missing, negative, and overflowing v2 payloads.
+- Pricing/report tests proving partial classified cost remains visible and all-unclassified cost is unknown.
+- DTO tests proving canonical and coverage fields remain present at zero.
+- PostgreSQL integration test applies the additive migration twice and verifies hot-to-daily canonical lineage.
+- Frontend production build type-checks all six mutually exclusive display buckets.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```go
+if !breakdown.Valid() {
+    return legacyProviderGuess(raw.Tokens)
+}
+```
+
+This makes a malformed declared-v2 record look trustworthy.
+
+#### Correct
+
+```go
+if declaredV2 && !valid {
+    return inconsistentWithUnclassifiedTotal(authoritativeTotal)
+}
+if !declaredV2 {
+    return legacyProviderFallback(raw.Tokens)
+}
+```

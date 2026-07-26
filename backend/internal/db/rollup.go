@@ -28,7 +28,10 @@ WHERE usage_date >= $1::date AND usage_date <= $2::date`, startDate, endDate); e
 	_, err = tx.Exec(ctx, `
 INSERT INTO daily_account_usage (
   usage_date, source, model, key_fingerprint, key_mask, long_context, requests, failed_requests,
-  input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens, updated_at
+  input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+  uncached_input_tokens, canonical_cache_read_tokens, canonical_cache_creation_tokens,
+  non_reasoning_output_tokens, canonical_reasoning_tokens, unclassified_tokens,
+  complete_requests, unclassified_requests, inconsistent_requests, legacy_requests, updated_at
 )
 SELECT
   (event_ts AT TIME ZONE $3)::date AS usage_date,
@@ -40,6 +43,12 @@ SELECT
   count(*) FILTER (WHERE h.failed),
   sum(h.input_tokens), sum(h.output_tokens), sum(h.reasoning_tokens), sum(h.cached_tokens),
   sum(h.cache_read_tokens), sum(h.cache_creation_tokens), sum(h.total_tokens),
+  sum(h.uncached_input_tokens), sum(h.canonical_cache_read_tokens), sum(h.canonical_cache_creation_tokens),
+  sum(h.non_reasoning_output_tokens), sum(h.canonical_reasoning_tokens), sum(h.unclassified_tokens),
+  count(*) filter (where h.accounting_quality='complete'),
+  count(*) filter (where h.accounting_quality='unclassified'),
+  count(*) filter (where h.accounting_quality='inconsistent'),
+  count(*) filter (where h.accounting_version=1),
   now()
 FROM request_events_hot h
 LEFT JOIN model_prices mp ON mp.model = h.model
@@ -57,6 +66,16 @@ ON CONFLICT (usage_date, source, model, key_fingerprint, long_context) DO UPDATE
   cache_read_tokens     = EXCLUDED.cache_read_tokens,
   cache_creation_tokens = EXCLUDED.cache_creation_tokens,
   total_tokens          = EXCLUDED.total_tokens,
+  uncached_input_tokens = EXCLUDED.uncached_input_tokens,
+  canonical_cache_read_tokens = EXCLUDED.canonical_cache_read_tokens,
+  canonical_cache_creation_tokens = EXCLUDED.canonical_cache_creation_tokens,
+  non_reasoning_output_tokens = EXCLUDED.non_reasoning_output_tokens,
+  canonical_reasoning_tokens = EXCLUDED.canonical_reasoning_tokens,
+  unclassified_tokens = EXCLUDED.unclassified_tokens,
+  complete_requests = EXCLUDED.complete_requests,
+  unclassified_requests = EXCLUDED.unclassified_requests,
+  inconsistent_requests = EXCLUDED.inconsistent_requests,
+  legacy_requests = EXCLUDED.legacy_requests,
   updated_at            = now()`,
 		startDate, endDate, tz)
 	if err != nil {
