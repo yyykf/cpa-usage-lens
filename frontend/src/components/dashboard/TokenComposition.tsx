@@ -3,9 +3,7 @@ import { tokenSegments } from '@/lib/tokens'
 import { formatInt } from '@/lib/format'
 import type { Overview } from '../../types'
 
-// Token 构成条：输入 / 缓存读 / 缓存写 / 输出 四段水平占比 + 图例带数值。
-// 四段经 tokenSegments 使用后端 provider-aware 的 canonical token 口径；
-// 分母用四段之和（= totalTokens），与 design-system / mockup 一致。
+// Token 构成条使用 CPA v2 六个互斥 canonical buckets；各段之和等于权威总量。
 export default function TokenComposition({ overview, loading }: { overview: Overview; loading: boolean }) {
   const segments = tokenSegments(overview)
   const total = segments.reduce((s, seg) => s + seg.value, 0)
@@ -31,6 +29,13 @@ export default function TokenComposition({ overview, loading }: { overview: Over
           </div>
         ))}
       </div>
+      {!loading && overview.costCoverage !== 'complete' && (
+        <div className="mt-3 font-mono text-[11px] text-muted-foreground">
+          {overview.costCoverage === 'partial'
+            ? `${formatInt(overview.unclassifiedRequests)} 条未分类、${formatInt(overview.inconsistentRequests)} 条不一致；未可靠分类部分不计入成本`
+            : '当前范围没有可可靠分类并计费的 Token'}
+        </div>
+      )}
     </Panel>
   )
 }

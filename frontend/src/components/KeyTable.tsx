@@ -83,7 +83,7 @@ export default function KeyTable({ keys, loading }: { keys: KeyUsage[]; loading:
                     {k.cost === null ? (
                       <span className="text-muted-foreground">未知</span>
                     ) : (
-                      <span className="text-[hsl(var(--data-cost))]">{formatCost(k.cost)}</span>
+                      <span className="text-[hsl(var(--data-cost))]">{formatCost(k.cost)}{k.costCoverage === 'partial' ? ' · 部分' : ''}</span>
                     )}
                   </TableCell>
                   <TableCell className="py-3.5 text-right font-num text-[13.5px]">

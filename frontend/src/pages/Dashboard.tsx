@@ -53,6 +53,13 @@ const EMPTY_OVERVIEW: Overview = {
   cacheReadTokens: 0,
   canonicalCacheReadTokens: 0,
   cacheCreationTokens: 0,
+  nonReasoningOutputTokens: 0,
+  unclassifiedTokens: 0,
+  costCoverage: 'unknown',
+  completeRequests: 0,
+  unclassifiedRequests: 0,
+  inconsistentRequests: 0,
+  legacyRequests: 0,
   hasPrevious: false,
   previous: null,
 }

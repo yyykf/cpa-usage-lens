@@ -12,6 +12,7 @@ import (
 )
 
 const longContextMigration = "20260712220233_add_long_context_pricing.sql"
+const accountingV2Migration = "20260726000000_add_token_accounting_v2.sql"
 
 func TestLongContextMigrationAndRollup(t *testing.T) {
 	url := os.Getenv("TEST_DATABASE_URL")
@@ -45,6 +46,8 @@ VALUES ('2026-07-11', 'legacy', 'gpt-5.6-sol', 'none', '(no key)', 1)`)
 	}
 	execMigration(t, ctx, database, longContextMigration)
 	execMigration(t, ctx, database, longContextMigration) // idempotency gate
+	execMigration(t, ctx, database, accountingV2Migration)
+	execMigration(t, ctx, database, accountingV2Migration) // idempotency gate
 	var legacyLong bool
 	if err := database.Pool.QueryRow(ctx, `
 SELECT long_context FROM daily_account_usage
@@ -104,10 +107,11 @@ INSERT INTO model_prices (
 
 INSERT INTO request_events_hot (
   request_id, event_ts, source, provider, model, key_fingerprint, key_mask,
-  input_tokens, output_tokens, total_tokens
+  input_tokens, output_tokens, total_tokens,
+  accounting_version, accounting_quality, uncached_input_tokens, non_reasoning_output_tokens
 ) VALUES
-  ('base', '2026-07-12T01:00:00Z', 'user', 'codex', 'gpt-5.6-sol', 'none', '(no key)', 272000, 10, 272010),
-  ('long', '2026-07-12T02:00:00Z', 'user', 'codex', 'gpt-5.6-sol', 'none', '(no key)', 272001, 10, 272011)`)
+  ('base', '2026-07-12T01:00:00Z', 'user', 'codex', 'gpt-5.6-sol', 'none', '(no key)', 272000, 10, 272010, 2, 'complete', 272000, 10),
+  ('long', '2026-07-12T02:00:00Z', 'user', 'codex', 'gpt-5.6-sol', 'none', '(no key)', 272001, 10, 272011, 2, 'complete', 272001, 10)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,6 +128,9 @@ INSERT INTO request_events_hot (
 	}
 	if rows[0].LongContext || !rows[1].LongContext {
 		t.Fatalf("strict threshold classification wrong: %+v", rows)
+	}
+	if rows[0].Accounting.CompleteRequests != 1 || rows[0].Accounting.Tokens.UncachedInput != 272000 {
+		t.Fatalf("accounting v2 rollup lost canonical fields: %+v", rows[0].Accounting)
 	}
 
 	// 元数据变化后重跑：旧 long=true 行必须被删除，而不是与新 base 行并存造成双算。

@@ -12,13 +12,15 @@ export const CHART_COLORS = {
   background: 'hsl(var(--background))', // 段间深色间隙 / 描边
 } as const
 
-// token 构成四段（输入 / 输出 / 缓存读 / 缓存写）固定语义色。
+// CPA accounting v2 的六个互斥 token 桶固定语义色。
 // 缓存写用 faint（最弱）——它占比小且属"额外开销"，弱化呈现。
 export const TOKEN_PART_COLORS = {
   input: 'hsl(var(--m1))',
   output: 'hsl(var(--m2))',
+  reasoning: 'hsl(var(--m4))',
   cacheRead: 'hsl(var(--m3))',
   cacheCreation: 'hsl(var(--faint))',
+  unclassified: 'hsl(var(--data-failed))',
 } as const
 
 // 模型分布色阶（青→黄绿，4 档；>4 个模型时按序循环复用最后几档的插值）。

@@ -27,6 +27,30 @@ func CostAtTier(t model.Tokens, p model.ModelPrice, longContext bool) (float64, 
 	return Cost(t, p)
 }
 
+// CostCanonicalAtTier 直接按 CPA v2 的互斥桶计费，不再推断 provider 字段语义。
+func CostCanonicalAtTier(t model.CanonicalTokens, p model.ModelPrice, longContext bool) (float64, bool) {
+	if longContext {
+		p.InputCostPerToken = p.LongContextInputCostPerToken
+		p.OutputCostPerToken = p.LongContextOutputCostPerToken
+		p.CacheReadCostPerToken = p.LongContextCacheReadCostPerToken
+		p.CacheCreationCostPerToken = p.LongContextCacheCreationCostPerToken
+	}
+	if (t.UncachedInput > 0 && p.InputCostPerToken == nil) ||
+		((t.NonReasoningOutput > 0 || t.Reasoning > 0) && p.OutputCostPerToken == nil) {
+		return 0, false
+	}
+	var cost float64
+	if p.InputCostPerToken != nil {
+		cost += float64(t.UncachedInput) * *p.InputCostPerToken
+	}
+	if p.OutputCostPerToken != nil {
+		cost += float64(t.NonReasoningOutput+t.Reasoning) * *p.OutputCostPerToken
+	}
+	cost += cacheCost(t.CacheRead, p.CacheReadCostPerToken, p.InputCostPerToken)
+	cost += cacheCost(t.CacheCreation, p.CacheCreationCostPerToken, p.InputCostPerToken)
+	return cost, true
+}
+
 // Cost 用价格表算一组 token 的成本（USD）。
 // 规则：input/output 是必须有价的核心维度——若对应 token>0 但缺单价，返回 ok=false（成本"未知"）。
 // OpenAI reasoning 是 output 的拆分，不额外叠加；其他 provider 保留独立 reasoning 计费。

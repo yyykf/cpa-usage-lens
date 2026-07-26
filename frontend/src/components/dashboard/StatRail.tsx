@@ -48,7 +48,15 @@ export default function StatRail({
         valueColor={overview.cost === null ? 'text-muted-foreground' : 'text-[hsl(var(--data-cost))]'}
         delta={deltas.cost}
         loading={loading}
-        meta={<span className="text-faint">含缓存折扣</span>}
+        meta={
+          overview.costCoverage === 'partial' ? (
+            <span className="text-[hsl(var(--data-cost))]">部分统计 · {formatInt(overview.unclassifiedTokens)} Token 未分类</span>
+          ) : overview.costCoverage === 'unknown' ? (
+            <span className="text-muted-foreground">无可靠可计费数据</span>
+          ) : (
+            <span className="text-faint">含缓存折扣</span>
+          )
+        }
       />
       <Stat
         dotColor={CHART_COLORS.failed}

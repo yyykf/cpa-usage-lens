@@ -10,6 +10,18 @@ export interface TokenBreakdown {
   cacheReadTokens: number
   canonicalCacheReadTokens: number
   cacheCreationTokens: number
+  nonReasoningOutputTokens: number
+  unclassifiedTokens: number
+}
+
+export type CostCoverage = 'complete' | 'partial' | 'unknown'
+
+export interface AccountingQualitySummary {
+  costCoverage: CostCoverage
+  completeRequests: number
+  unclassifiedRequests: number
+  inconsistentRequests: number
+  legacyRequests: number
 }
 
 // 环比对比的「上一等长周期」可比指标（仅 4 个 KPI 维度）。后端只给绝对值，百分比由前端算。
@@ -20,7 +32,7 @@ export interface PreviousPeriod {
   failed: number
 }
 
-export interface Overview extends TokenBreakdown {
+export interface Overview extends TokenBreakdown, AccountingQualitySummary {
   requests: number
   tokens: number // 总量（不变）
   cost: number | null // null = 存在缺价模型，显示"未知"
@@ -29,7 +41,7 @@ export interface Overview extends TokenBreakdown {
   previous: PreviousPeriod | null // hasPrevious=false 时为 null
 }
 
-export interface AccountUsage extends TokenBreakdown {
+export interface AccountUsage extends TokenBreakdown, AccountingQualitySummary {
   source: string
   requests: number
   tokens: number
@@ -39,7 +51,7 @@ export interface AccountUsage extends TokenBreakdown {
 
 // 按脱敏 api_key 聚合的用量榜（与账号榜正交、平级的独立维度）。
 // 字段口径与 AccountUsage 完全对齐，仅把维度键从 source 换成 fingerprint/keyMask。
-export interface KeyUsage extends TokenBreakdown {
+export interface KeyUsage extends TokenBreakdown, AccountingQualitySummary {
   fingerprint: string // sha256 hex 全长，做唯一标识 / React key；'none' = 非 key 认证桶
   keyMask: string // 展示掩码（sk-…后4位）；'none' 桶可能是 "none"/"(no key)"
   requests: number
@@ -54,6 +66,7 @@ export interface TrendPoint {
   tokens: number
   cost: number | null
   failed: number
+  costCoverage: CostCoverage
 }
 
 // GET /api/models 的单日数据点：tokens 仅含当天有数据的模型。
@@ -70,6 +83,7 @@ export interface ModelRankItem {
   model: string
   tokens: number
   cost: number | null // null = 该模型缺价（成本未知）
+  costCoverage: CostCoverage
 }
 
 // GET /api/models 响应：models 按周期内总 token 降序；daily 按日期升序。

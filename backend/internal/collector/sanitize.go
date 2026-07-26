@@ -112,7 +112,90 @@ func toEvent(raw rawQueueItem) (model.UsageEvent, bool) {
 		ev.FailStatusCode = raw.Fail.StatusCode
 	}
 	normalizeCacheAliases(ev.Provider, &ev.Tokens)
+	ev.Accounting = legacyAccounting(ev.Tokens, ev.Provider)
+	if raw.AccountingVersion == 2 {
+		if raw.TokenBreakdown != nil {
+			if accounting, ok := canonicalAccounting(*raw.TokenBreakdown); ok {
+				ev.Accounting = accounting
+			} else {
+				ev.Accounting = inconsistentAccounting(max(raw.Tokens.Total, raw.TokenBreakdown.TotalTokens))
+			}
+		} else {
+			ev.Accounting = inconsistentAccounting(raw.Tokens.Total)
+		}
+		ev.Tokens.Total = ev.Accounting.Tokens.Total
+	}
 	return ev, true
+}
+
+func canonicalAccounting(raw rawTokenBreakdown) (model.Accounting, bool) {
+	if raw.SchemaVersion != 2 || (raw.Quality != "complete" && raw.Quality != "unclassified" && raw.Quality != "inconsistent") {
+		return model.Accounting{}, false
+	}
+	values := []int64{raw.TotalTokens, raw.UnclassifiedTokens, raw.Input.TotalTokens, raw.Input.UncachedTokens,
+		raw.Input.CacheReadTokens, raw.Input.CacheWriteTokens, raw.Output.TotalTokens,
+		raw.Output.NonReasoningTokens, raw.Output.ReasoningTokens}
+	for _, value := range values {
+		if value < 0 {
+			return model.Accounting{}, false
+		}
+	}
+	inputTotal, inputOK := safeTokenSum(raw.Input.UncachedTokens, raw.Input.CacheReadTokens, raw.Input.CacheWriteTokens)
+	outputTotal, outputOK := safeTokenSum(raw.Output.NonReasoningTokens, raw.Output.ReasoningTokens)
+	total, totalOK := safeTokenSum(raw.Input.TotalTokens, raw.Output.TotalTokens, raw.UnclassifiedTokens)
+	if !inputOK || !outputOK || !totalOK || raw.Input.TotalTokens != inputTotal ||
+		raw.Output.TotalTokens != outputTotal || raw.TotalTokens != total ||
+		(raw.Quality == "complete" && raw.UnclassifiedTokens != 0) {
+		return model.Accounting{}, false
+	}
+	return model.Accounting{Version: 2, Quality: raw.Quality, Tokens: model.CanonicalTokens{
+		UncachedInput: raw.Input.UncachedTokens, CacheRead: raw.Input.CacheReadTokens,
+		CacheCreation: raw.Input.CacheWriteTokens, NonReasoningOutput: raw.Output.NonReasoningTokens,
+		Reasoning: raw.Output.ReasoningTokens, Unclassified: raw.UnclassifiedTokens, Total: raw.TotalTokens,
+	}}, true
+}
+
+func safeTokenSum(values ...int64) (int64, bool) {
+	var total int64
+	for _, value := range values {
+		if value < 0 || total > int64(^uint64(0)>>1)-value {
+			return 0, false
+		}
+		total += value
+	}
+	return total, true
+}
+
+func inconsistentAccounting(total int64) model.Accounting {
+	if total < 0 {
+		total = 0
+	}
+	return model.Accounting{Version: 2, Quality: "inconsistent", Tokens: model.CanonicalTokens{Unclassified: total, Total: total}}
+}
+
+func legacyAccounting(tokens model.Tokens, provider string) model.Accounting {
+	cacheRead, uncached := tokens.CacheRead, tokens.Input
+	switch strings.ToLower(provider) {
+	case "codex", "openai":
+		cacheRead = max(tokens.Cached, tokens.CacheRead)
+		uncached = max(tokens.Input-cacheRead-tokens.CacheCreation, 0)
+	case "claude", "anthropic":
+		cacheRead = tokens.CacheRead
+	default:
+		if tokens.Cached > 0 && (tokens.CacheRead == 0 || tokens.CacheRead == tokens.Cached) {
+			cacheRead = max(tokens.Cached, tokens.CacheRead)
+			uncached = max(tokens.Input-cacheRead-tokens.CacheCreation, 0)
+		}
+	}
+	nonReasoning := tokens.Output
+	if strings.EqualFold(provider, "codex") || strings.EqualFold(provider, "openai") {
+		nonReasoning = max(tokens.Output-tokens.Reasoning, 0)
+	}
+	total := uncached + cacheRead + tokens.CacheCreation + nonReasoning + tokens.Reasoning
+	return model.Accounting{Version: 1, Quality: "complete", Tokens: model.CanonicalTokens{
+		UncachedInput: uncached, CacheRead: cacheRead, CacheCreation: tokens.CacheCreation,
+		NonReasoningOutput: nonReasoning, Reasoning: tokens.Reasoning, Total: total,
+	}}
 }
 
 // normalizeCacheAliases 把 CPA 针对不同 provider 的兼容别名收敛为 Lens 既有口径。

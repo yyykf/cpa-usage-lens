@@ -261,6 +261,12 @@ Use case: during iteration/debugging (e.g. validating the frontend or a new quer
 
 **What changes.** The migration adds LiteLLM provider/threshold/high-tier fields to `model_prices`, adds `daily_account_usage.long_context`, and widens the daily primary key from `(usage_date, source, model, key_fingerprint)` to `(usage_date, source, model, key_fingerprint, long_context)`. Existing daily rows remain `long_context=false`; historical rows are intentionally not reclassified because their per-request hot detail may no longer exist.
 
+### CPA v7.2.97 token accounting v2
+
+Migration `20260726000000_add_token_accounting_v2.sql` is additive: it stores canonical input/output/cache/reasoning/unclassified buckets and quality counters without changing either table's primary key. Apply it before starting the matching Lens binary. Existing rows are retained as legacy accounting and are not presented as native CPA v2 evidence.
+
+For `quality=complete`, all classified buckets participate in cost estimation. For `unclassified` or `inconsistent`, Lens keeps authoritative total tokens, estimates only reliably classified buckets, and labels the result as partial. Cost is unknown only when the selected range has no reliably classifiable tokens. No CPA, Redis, authentication, or startup configuration changes are required.
+
 **Compatibility boundary.** Older CPA payloads remain supported: missing cache-write fields decode as zero, while CPA v7.2.67 cache aliases are normalized by the new Lens binary. The breaking boundary is the **Lens schema/binary pair**, not the CPA version. An old Lens binary still uses the four-column rollup conflict target, so it fails against the five-column primary key.
 
 **Required upgrade order (do not reorder).**
@@ -530,6 +536,12 @@ backend 是单进程，默认同时跑：后台采集循环 + rollup/清理调�
 > 适用于升级时跨过迁移 `20260712220233_add_long_context_pricing.sql`。全新部署不受影响——首次启动前执行全部迁移即可。
 
 **改了什么。** 迁移为 `model_prices` 增加 LiteLLM provider、模型阈值和高档价格，为 `daily_account_usage` 增加 `long_context`，并把 daily 主键从 `(usage_date, source, model, key_fingerprint)` 扩成 `(usage_date, source, model, key_fingerprint, long_context)`。已有 daily 行统一保留为 `long_context=false`；历史请求明细可能已被清理，因此本次明确不追溯重分档。
+
+### CPA v7.2.97 Token Accounting v2
+
+迁移 `20260726000000_add_token_accounting_v2.sql` 是纯增量迁移：保存 canonical 输入、输出、缓存、推理、未分类桶和质量计数，不改变两张表的主键。必须先应用迁移，再启动匹配的新 Lens binary。存量行按 legacy accounting 保留，不伪装成原生 CPA v2 证据。
+
+`quality=complete` 时全部已分类桶参与成本估算；`unclassified` 或 `inconsistent` 时保留权威总 Token，只估算可靠分类部分并标注“部分统计”。只有所选范围完全没有可靠可分类 Token 时，成本才显示“未知”。本次不需要修改 CPA、Redis、认证或启动配置。
 
 **兼容边界。** 旧 CPA payload 仍然兼容：缺失的缓存写字段按零解析，CPA v7.2.67 的缓存别名由新 Lens binary 归一化。破坏性边界是 **Lens schema 与 binary 的配套版本**，不是 CPA 版本。旧 Lens 仍使用四列 rollup conflict target，面对五列主键会持续失败。
 

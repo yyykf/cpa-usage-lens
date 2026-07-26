@@ -151,7 +151,7 @@ function TrendTooltip({ active, payload, hidden }: { active?: boolean; payload?:
   const point = payload[0].payload
   const rows: { key: SeriesKey; label: string; color: string; text: string }[] = []
   if (!hidden.has('tokens')) rows.push({ key: 'tokens', label: 'Token', color: CHART_COLORS.tokens, text: formatInt(point.tokens) })
-  if (!hidden.has('cost')) rows.push({ key: 'cost', label: '成本', color: CHART_COLORS.cost, text: formatCost(point.cost) })
+  if (!hidden.has('cost')) rows.push({ key: 'cost', label: point.costCoverage === 'partial' ? '成本（部分）' : '成本', color: CHART_COLORS.cost, text: formatCost(point.cost) })
   if (!hidden.has('requests')) rows.push({ key: 'requests', label: '请求', color: CHART_COLORS.requests, text: formatInt(point.requests) })
 
   return (

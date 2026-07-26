@@ -12,7 +12,10 @@ import (
 func (d *DB) QueryDailyUsage(ctx context.Context, startDate, endDate string) ([]model.DailyUsage, error) {
 	rows, err := d.Pool.Query(ctx, `
 SELECT usage_date, source, model, key_fingerprint, key_mask, long_context, requests, failed_requests,
-       input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
+       input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+       uncached_input_tokens, canonical_cache_read_tokens, canonical_cache_creation_tokens,
+       non_reasoning_output_tokens, canonical_reasoning_tokens, unclassified_tokens,
+       complete_requests, unclassified_requests, inconsistent_requests, legacy_requests
 FROM daily_account_usage
 WHERE usage_date >= $1::date AND usage_date < $2::date
 ORDER BY usage_date, source, model, key_fingerprint, long_context`, startDate, endDate)
@@ -26,7 +29,11 @@ ORDER BY usage_date, source, model, key_fingerprint, long_context`, startDate, e
 		var u model.DailyUsage
 		if err := rows.Scan(&u.UsageDate, &u.Source, &u.Model, &u.KeyFingerprint, &u.KeyMask, &u.LongContext, &u.Requests, &u.FailedRequests,
 			&u.Tokens.Input, &u.Tokens.Output, &u.Tokens.Reasoning, &u.Tokens.Cached,
-			&u.Tokens.CacheRead, &u.Tokens.CacheCreation, &u.Tokens.Total); err != nil {
+			&u.Tokens.CacheRead, &u.Tokens.CacheCreation, &u.Tokens.Total,
+			&u.Accounting.Tokens.UncachedInput, &u.Accounting.Tokens.CacheRead, &u.Accounting.Tokens.CacheCreation,
+			&u.Accounting.Tokens.NonReasoningOutput, &u.Accounting.Tokens.Reasoning, &u.Accounting.Tokens.Unclassified,
+			&u.Accounting.CompleteRequests, &u.Accounting.UnclassifiedRequests, &u.Accounting.InconsistentRequests,
+			&u.Accounting.LegacyRequests); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
