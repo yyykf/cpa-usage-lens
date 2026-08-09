@@ -3,6 +3,12 @@
 > Read this before changing CPA token parsing, LiteLLM price fields, daily rollup,
 > report DTOs, or `internal/pricing/cost.go`.
 
+Decision context: ADR
+[0002](../../../.project_context/design/decisions/0002-long-context-pricing-dimension.md)
+defines request-level price tiers, and ADR
+[0003](../../../.project_context/design/decisions/0003-cpa-v2-accounting-quality.md)
+defines canonical accounting and partial cost.
+
 ## Scenario: Provider-aware cache and long-context pricing
 
 ### 1. Scope / Trigger

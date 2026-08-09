@@ -1,54 +1,83 @@
-# Directory Structure
+# Backend Directory and Ownership
 
-> How backend code is organized in this project.
+## Trigger
 
----
+Apply this spec when adding a package, moving behavior, changing constructors or
+interfaces, or wiring a new runtime service.
 
-## Overview
+## Current Layout
 
-<!--
-Document your project's backend directory structure here.
-
-Questions to answer:
-- How are modules/packages organized?
-- Where does business logic live?
-- Where are API endpoints defined?
-- How are utilities and helpers organized?
--->
-
-(To be filled by the team)
-
----
-
-## Directory Layout
-
-```
-<!-- Replace with your actual structure -->
-src/
-├── ...
-└── ...
+```text
+backend/
+├── cmd/server/              process composition, goroutines, shutdown
+├── internal/api/            HTTP routes, auth boundary, response DTO assembly
+├── internal/collector/      CPA destructive queue, sanitization, replay, ingest
+├── internal/config/         environment loading, defaults, validation
+├── internal/db/             pgx queries, writes, transactions, state
+├── internal/model/          cross-backend domain types and JSON DTOs
+├── internal/pricing/        LiteLLM prices and token-to-cost semantics
+├── internal/report/         daily rows plus prices into API reports
+├── internal/rollup/         hot-to-daily scheduling and cleanup order
+└── internal/timeutil/       configured-timezone calendar boundaries
 ```
 
----
+## Pattern
 
-## Module Organization
+### Composition boundary
 
-<!-- How should new features/modules be organized? -->
+- `cmd/server/main.go` MUST construct concrete dependencies, start long-running
+  goroutines, install signal handling, and perform graceful shutdown.
+- `main` MUST NOT absorb queue parsing, SQL, report calculations, or HTTP
+  business rules. Put those in the owning `internal` package and inject them.
+- Background loops MUST accept a `context.Context` and stop on cancellation.
 
-(To be filled by the team)
+Evidence: `backend/cmd/server/main.go`, `pricing.Service.RunDaily`,
+`collector.Collector.Run`, and `rollup.Scheduler.Run`.
 
----
+### Package ownership
 
-## Naming Conventions
+- A package MUST own one stable concern shown above. Extend the existing owner
+  before creating a parallel `service`, `util`, or `common` package.
+- Cross-package data contracts belong in `internal/model`; package-private
+  parsing or intermediate types stay with their owner.
+- `internal/timeutil` is the single owner of day/range calculations. Handlers,
+  reports, and rollups MUST NOT independently calculate calendar boundaries.
+- Cost calculation belongs in `pricing`; grouping and DTO construction belong
+  in `report`; SQL remains in `db`.
 
-<!-- File and folder naming rules -->
+### Interfaces and dependencies
 
-(To be filled by the team)
+- Consumer packages SHOULD define the smallest interface they need. Existing
+  examples are `api.DataStore`, `api.Prices`, `collector.Store`, and
+  `rollup.Store`.
+- Interfaces MUST NOT expose `*db.DB`, `pgxpool.Pool`, or unrelated methods only
+  to make a concrete type fit.
+- Constructors SHOULD receive collaborators and immutable configuration. Tests
+  then use small fakes without a global container.
 
----
+### Naming
 
-## Examples
+- Package names are short, lower-case domain names: `collector`, `pricing`,
+  `report`, not Java-style nested module names.
+- Export a symbol only when another package consumes it. Keep helpers and
+  transport-only types unexported.
+- Tests live beside their package as `*_test.go`; database integration tests use
+  the `integration` build tag.
 
-<!-- Link to well-organized modules as examples -->
+## Avoid
 
-(To be filled by the team)
+- Handler code opening DB connections or reading environment variables.
+- DB code importing API DTO behavior or frontend concepts.
+- A second token normalization helper outside collector/pricing/report owners.
+- Generic shared packages created for one caller.
+- Package-level mutable singletons for DB, prices, clock, or auth.
+
+## Verify
+
+```bash
+go list ./...
+go test ./... -race
+```
+
+Review new imports and interfaces manually: dependency direction must follow the
+current composition path, and no package may bypass its owning boundary.

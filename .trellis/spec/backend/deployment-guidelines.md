@@ -11,11 +11,13 @@
 
 - Production command:
   ```bash
-  CUL_VERSION=<latest-release-tag> docker compose -f docker-compose.prod.yml up -d
+  : "${CUL_VERSION:?set CUL_VERSION to a verified GitHub Release tag}"
+  docker compose -f docker-compose.prod.yml up -d
   ```
 - Debug command:
   ```bash
-  CUL_VERSION=<latest-release-tag> docker compose \
+  : "${CUL_VERSION:?set CUL_VERSION to a verified GitHub Release tag}"
+  docker compose \
     -f docker-compose.prod.yml \
     -f docker-compose.debug.yml \
     up -d
@@ -93,6 +95,9 @@ services:
 Keep the default deployment small and expose backend direct access only when the operator explicitly opts into debugging.
 
 ## Scenario: Breaking Daily Primary-Key Migration
+
+Decision context: ADR
+[0002](../../../.project_context/design/decisions/0002-long-context-pricing-dimension.md).
 
 ### 1. Scope / Trigger
 

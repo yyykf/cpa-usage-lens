@@ -1,139 +1,112 @@
-# Bootstrap Task: Fill Project Development Guidelines
+# Bootstrap Executable Project Specifications
 
-**You (the AI) are running this task. The developer does not read this file.**
+## Goal
 
-The developer just ran `trellis init` on this project for the first time.
-`.trellis/` now exists with empty spec scaffolding, and this bootstrap task
-exists under `.trellis/tasks/`. When they want to work on it, they should start
-this task from a session that provides Trellis session identity.
+Turn `.trellis/spec/` from mostly empty scaffolding into the project's
+normative engineering guardrails. A future implementation or review that loads
+the relevant specs should understand the real architecture, preserve data and
+business semantics, follow local code patterns, and run the right verification
+without relying on conversation history.
 
-**Your job**: help them populate `.trellis/spec/` with the team's real
-coding conventions. Every future AI session — this project's
-`trellis-implement` and `trellis-check` sub-agents — auto-loads spec files
-listed in per-task jsonl manifests. Empty spec = sub-agents write generic
-code. Real spec = sub-agents match the team's actual patterns.
+## Spec Role
 
-Don't dump instructions. Open with a short greeting, figure out if the repo
-has any existing convention docs (CLAUDE.md, .cursorrules, etc.), and drive
-the rest conversationally.
+- Specs define current executable constraints: how code must be organized,
+  which layer owns a decision, exact cross-layer contracts, forbidden patterns,
+  and required verification.
+- `.project_context/design/` explains architecture and decision history; specs
+  state the current rule and link to design context instead of duplicating it.
+- Task PRDs define one change; execution records hold one rollout's evidence.
+  Neither temporary progress nor point-in-time production values belong in spec.
+- Documentation alone is not a guarantee. Index routing, task context loading,
+  automated tests, and Trellis quality checks form the anti-drift loop.
 
----
+## Scope
 
-## Status (update the checkboxes as you complete each item)
+### Backend specs
 
-- [ ] Fill backend guidelines
-- [ ] Fill frontend guidelines
-- [ ] Add code examples
+- directory and package ownership
+- configuration and composition boundaries
+- database queries, migrations, hot-to-daily lineage, and query-time cost
+- error propagation and destructive-source failure behavior
+- logging and secret exclusion
+- code/test quality gates
+- preserve and cross-link existing deployment, usage-queue, and cost contracts
 
----
+### Frontend specs
 
-## Spec files to populate
+- directory and component ownership
+- component composition and shared primitives
+- hooks and auto-refresh behavior
+- local/auth/server/URL state boundaries
+- Go JSON DTO to TypeScript/default-object alignment
+- canonical token-accounting display contract
+- frontend quality, null/loading/empty/error states, and production build gate
+- preserve existing Tailwind/shadcn styling contract
 
+### Navigation and thinking guides
 
-### Backend guidelines
+- make backend/frontend indexes executable routers with change triggers,
+  pre-development checklists, and quality checks
+- keep guides as short thinking checklists that point to normative specs
+- remove repository-irrelevant Trellis template examples from shared guides
 
-| File | What to document |
-|------|------------------|
-| `.trellis/spec/backend/directory-structure.md` | Where different file types go (routes, services, utils) |
-| `.trellis/spec/backend/database-guidelines.md` | ORM, migrations, query patterns, naming conventions |
-| `.trellis/spec/backend/error-handling.md` | How errors are caught, logged, and returned |
-| `.trellis/spec/backend/logging-guidelines.md` | Log levels, format, what to log |
-| `.trellis/spec/backend/quality-guidelines.md` | Code review standards, testing requirements |
+## Rules
 
+- Document the current proven architecture, not generic Go/React advice.
+- Every important rule needs source, test, config, or project-doc evidence.
+- Do not weaken a required safety contract to match a known defect. Mark known
+  deviations and link a repair task until implementation catches up.
+- Use MUST/MUST NOT for gateable constraints, SHOULD for defaults that may be
+  intentionally overridden, and MAY for allowed options.
+- Cross-layer/infra contracts keep the seven-section executable format.
+  Local conventions use a smaller trigger/pattern/evidence/avoid/verify shape.
+- Reference stable file paths and symbol names; avoid line numbers.
+- Delete non-applicable headings and all placeholder/template text.
+- Do not change application source code in this task.
+- Do not create a second architecture source of truth under `.trellis/spec/`.
+  Architecture rationale remains in `.project_context/design/`.
 
-### Frontend guidelines
+## Files
 
-| File | What to document |
-|------|------------------|
-| `.trellis/spec/frontend/directory-structure.md` | Component/page/hook organization |
-| `.trellis/spec/frontend/component-guidelines.md` | Component patterns, props conventions |
-| `.trellis/spec/frontend/hook-guidelines.md` | Custom hook naming, patterns |
-| `.trellis/spec/frontend/state-management.md` | State library, patterns, what goes where |
-| `.trellis/spec/frontend/type-safety.md` | TypeScript conventions, type organization |
-| `.trellis/spec/frontend/quality-guidelines.md` | Linting, testing, accessibility |
+Update or reshape all files under:
 
-
-### Thinking guides (already populated)
-
-`.trellis/spec/guides/` contains general thinking guides pre-filled with
-best practices. Customize only if something clearly doesn't fit this project.
-
----
-
-## How to fill the spec
-
-### Step 1: Import from existing convention files first (preferred)
-
-Search the repo for existing convention docs. If any exist, read them and
-extract the relevant rules into the matching `.trellis/spec/` files —
-usually much faster than documenting from scratch.
-
-| File / Directory | Tool |
-|------|------|
-| `CLAUDE.md` / `CLAUDE.local.md` | Claude Code |
-| `AGENTS.md` | Codex / Claude Code / agent-compatible tools |
-| `.cursorrules` | Cursor |
-| `.cursor/rules/*.mdc` | Cursor (rules directory) |
-| `.windsurfrules` | Windsurf |
-| `.clinerules` | Cline |
-| `.roomodes` | Roo Code |
-| `.github/copilot-instructions.md` | GitHub Copilot |
-| `.vscode/settings.json` → `github.copilot.chat.codeGeneration.instructions` | VS Code Copilot |
-| `CONVENTIONS.md` / `.aider.conf.yml` | aider |
-| `CONTRIBUTING.md` | General project conventions |
-| `.editorconfig` | Editor formatting rules |
-
-### Step 2: Analyze the codebase for anything not covered by existing docs
-
-Scan real code to discover patterns. Before writing each spec file:
-- Find 2-3 real examples of each pattern in the codebase.
-- Reference real file paths (not hypothetical ones).
-- Document anti-patterns the team clearly avoids.
-
-### Step 3: Document reality, not ideals
-
-**Critical**: write what the code *actually does*, not what it should do.
-Sub-agents match the spec, so aspirational patterns that don't exist in the
-codebase will cause sub-agents to write code that looks out of place.
-
-If the team has known tech debt, document the current state — improvement
-is a separate conversation, not a bootstrap concern.
-
----
-
-## Quick explainer of the runtime (share when they ask "why do we need spec at all")
-
-- Every AI coding task spawns two sub-agents: `trellis-implement` (writes
-  code) and `trellis-check` (verifies quality).
-- Each task has `implement.jsonl` / `check.jsonl` manifests listing which
-  spec files to load.
-- The platform hook auto-injects those spec files + the task's `prd.md`
-  into every sub-agent prompt, so the sub-agent codes/reviews per team
-  conventions without anyone pasting them manually.
-- Source of truth: `.trellis/spec/`. That's why filling it well now pays
-  off forever.
-
----
-
-## Completion
-
-When the developer confirms the checklist items above are done with real
-examples (not placeholders), guide them to run:
-
-```bash
-python3 ./.trellis/scripts/task.py finish
-python3 ./.trellis/scripts/task.py archive 00-bootstrap-guidelines
+```text
+.trellis/spec/backend/
+.trellis/spec/frontend/
+.trellis/spec/guides/
 ```
 
-After archive, every new developer who joins this project will get a
-`00-join-<slug>` onboarding task instead of this bootstrap task.
+Add a dedicated frontend token-accounting display spec because it is a stable
+business/cross-layer contract missing from the original scaffold.
 
----
+## Acceptance Criteria
 
-## Suggested opening line
+- [x] Backend index routes change triggers to required specs and contains
+      pre-development and quality checklists.
+- [x] Frontend index routes change triggers to required specs and contains
+      pre-development and quality checklists.
+- [x] Backend directory, database, error, logging, and quality specs contain
+      project-specific rules with real evidence.
+- [x] Frontend directory, component, hook, state, type-safety, quality, and
+      token-accounting specs contain project-specific rules with real evidence.
+- [x] Existing usage-queue, cost, deployment, and styling contracts remain
+      consistent with the new indexes and surrounding specs.
+- [x] Shared guides contain project-relevant thinking triggers and no unrelated
+      Trellis upstream/template examples.
+- [x] No `To be filled`, `To fill`, `TODO: fill`, placeholder instructions, or
+      empty template headings remain under `.trellis/spec/`.
+- [x] Every relative Markdown link resolves to an existing repository file.
+- [x] Every documented verification command is runnable and passes, or its
+      external prerequisite is stated precisely.
+- [x] `python3 ./.trellis/scripts/get_context.py --mode packages` still discovers
+      the backend/frontend layers; the shared guides index exists and remains a
+      mandatory read in the Trellis before-development workflow.
+- [x] `git diff --check` passes.
 
-"Welcome to Trellis! Your init just set me up to help you fill the project
-spec — a one-time setup so every future AI session follows the team's
-conventions instead of writing generic code. Before we start, do you have
-any existing convention docs (CLAUDE.md, .cursorrules, CONTRIBUTING.md,
-etc.) I can pull from, or should I scan the codebase from scratch?"
+## Out of Scope
+
+- Product code, schema, API, frontend behavior, environment variables, or
+  deployment changes.
+- Rewriting ADRs or execution history.
+- Fixing unrelated product defects discovered during source inspection.
+- Changing Trellis workflow/runtime implementation.

@@ -3,6 +3,12 @@
 > Read this before changing `internal/collector`, CPA queue parsing, disk
 > buffering, event identity, or collector deployment topology.
 
+Decision context: ADR
+[0001](../../../.project_context/design/decisions/0001-usage-hot-composite-pk.md)
+defines replay identity, and ADR
+[0004](../../../.project_context/design/decisions/0004-durable-sanitized-usage-replay.md)
+defines persist-before-parse replay.
+
 ## Scenario: Durable consumption of destructive usage events
 
 ### 1. Scope / Trigger

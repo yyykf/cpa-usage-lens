@@ -1,105 +1,67 @@
-# Code Reuse Thinking Guide
+# Code-Reuse Thinking Guide
 
-> **Purpose**: Stop and think before creating new code - does it already exist?
+## Trigger
 
----
+Use before creating or duplicating a helper, formatter, component primitive,
+DTO mapping, report aggregate, token/cost rule, query, constant, or error path.
 
-## The Problem
-
-**Duplicated code is the #1 source of inconsistency bugs.**
-
-When you copy-paste or rewrite existing logic:
-- Bug fixes don't propagate
-- Behavior diverges over time
-- Codebase becomes harder to understand
-
----
-
-## Before Writing New Code
-
-### Step 1: Search First
+## Search Current Owners
 
 ```bash
-# Search for similar function names
-grep -r "functionName" .
-
-# Search for similar logic
-grep -r "keyword" .
+rg -n "costCoverage" backend frontend supabase .trellis/spec
 ```
 
-### Step 2: Ask These Questions
+Replace `costCoverage` with the real field, symbol, value, or behavior term for
+the current change.
 
-| Question | If Yes... |
-|----------|-----------|
-| Does a similar function exist? | Use or extend it |
-| Is this pattern used elsewhere? | Follow the existing pattern |
-| Could this be a shared utility? | Create it in the right place |
-| Am I copying code from another file? | **STOP** - extract to shared |
+Check likely owners first:
 
----
+- backend aggregation/DTO assembly: `backend/internal/report/report.go`;
+- token-to-cost rules: `backend/internal/pricing/cost.go`;
+- CPA normalization/replay: `backend/internal/collector/`;
+- date ranges: `backend/internal/timeutil/`;
+- API/auth request handling: `frontend/src/lib/api.ts`;
+- formatting: `frontend/src/lib/format.ts`;
+- canonical token segments: `frontend/src/lib/tokens.ts`;
+- chart/data colors: `frontend/src/lib/charts.ts`;
+- dashboard/UI primitives: `frontend/src/components/dashboard/` and
+  `frontend/src/components/ui/`.
 
-## Common Duplication Patterns
+## Questions
 
-### Pattern 1: Copy-Paste Functions
+- [ ] Is the proposed function already present under a different name?
+- [ ] Is this one business rule with several consumers, or only similar-looking
+      code with different ownership?
+- [ ] Can the current owner accept one small extension without parameter sprawl?
+- [ ] Would extraction reduce drift in two or more active consumers?
+- [ ] Does the abstraction hide a meaningful distinction such as source versus
+      key dimension, complete versus partial, or null versus zero?
+- [ ] Will tests exercise the shared rule once and consumer-specific behavior
+      separately?
 
-**Bad**: Copying a validation function to another file
+## Project Rules to Protect
 
-**Good**: Extract to shared utilities, import where needed
+- Account/key reports reuse the same token and cost aggregation while keeping
+  distinct dimension identity.
+- All token composition uses `tokenSegments`; do not create per-component
+  provider or legacy-field arithmetic.
+- All cost strings use `formatCost`; do not create local null/zero rules.
+- All API calls use the shared request boundary; do not duplicate token/401
+  handling.
+- Similar dashboard layout uses existing primitives before new wrappers.
 
-### Pattern 2: Similar Components
+## Do Not Abstract Yet
 
-**Bad**: Creating a new component that's 80% similar to existing
+- One short local transformation with one consumer.
+- Components that look similar but have different domain identity or interaction.
+- A generic helper whose options exceed its actual logic.
+- Future providers, pages, or pricing tiers with no present contract.
 
-**Good**: Extend existing component with props/variants
+This preserves DRY without violating KISS/YAGNI.
 
-### Pattern 3: Repeated Constants
+## After Editing
 
-**Bad**: Defining the same constant in multiple files
-
-**Good**: Single source of truth, import everywhere
-
----
-
-## When to Abstract
-
-**Abstract when**:
-- Same code appears 3+ times
-- Logic is complex enough to have bugs
-- Multiple people might need this
-
-**Don't abstract when**:
-- Only used once
-- Trivial one-liner
-- Abstraction would be more complex than duplication
-
----
-
-## After Batch Modifications
-
-When you've made similar changes to multiple files:
-
-1. **Review**: Did you catch all instances?
-2. **Search**: Run grep to find any missed
-3. **Consider**: Should this be abstracted?
-
----
-
-## Gotcha: Asymmetric Mechanisms Producing Same Output
-
-**Problem**: When two different mechanisms must produce the same file set (e.g., recursive directory copy for init vs. manual `files.set()` for update), structural changes (renaming, moving, adding subdirectories) only propagate through the automatic mechanism. The manual one silently drifts.
-
-**Symptom**: Init works perfectly, but update creates files at wrong paths or misses files entirely.
-
-**Prevention checklist**:
-- [ ] When migrating directory structures, search for ALL code paths that reference the old structure
-- [ ] If one path is auto-derived (glob/copy) and another is manually listed, the manual one needs updating
-- [ ] Add a regression test that compares outputs from both mechanisms
-
----
-
-## Checklist Before Commit
-
-- [ ] Searched for existing similar code
-- [ ] No copy-pasted logic that should be shared
-- [ ] Constants defined in one place
-- [ ] Similar patterns follow same structure
+- [ ] Search the old field/value/helper name again; no missed consumer remains.
+- [ ] Confirm there is one authoritative implementation of the business rule.
+- [ ] Confirm the shared abstraction has narrower or equal complexity.
+- [ ] Run package quality gates from backend/frontend indexes.

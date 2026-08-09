@@ -1,51 +1,51 @@
-# Hook Guidelines
+# Hook Contract
 
-> How hooks are used in this project.
+## Trigger
 
----
+Apply this spec when adding or changing custom hooks, timers, subscriptions,
+browser storage, or reusable effect lifecycle.
 
-## Overview
+## Pattern
 
-<!--
-Document your project's hook conventions here.
+- Create a custom hook only for reusable stateful/effect behavior. Pure
+  calculations belong in `lib/`; one component's simple local state stays in
+  that component.
+- Hook names MUST begin with `use`; exported state and actions MUST have an
+  explicit return type when they form a reusable contract.
+- Effects that allocate a timer, listener, or subscription MUST return cleanup.
+- When a timer needs the latest callback but should not restart on every render,
+  store the callback in a ref and update that ref in a separate effect.
+- Persist only validated, finite choices. `useAutoRefresh` reads localStorage,
+  distinguishes missing from numeric zero, validates against
+  `REFRESH_OPTIONS`, and falls back to `DEFAULT_REFRESH`.
+- Browser globals MUST be guarded when a hook can run during non-browser build
+  or evaluation.
 
-Questions to answer:
-- What custom hooks do you have?
-- How do you handle data fetching?
-- What are the naming conventions?
-- How do you share stateful logic?
--->
+Evidence: `frontend/src/hooks/useAutoRefresh.ts`.
 
-(To be filled by the team)
+## Timer Contract
 
----
+- `0` means disabled and MUST create no interval.
+- Changing interval MUST clean up the old timer before installing the next.
+- Component unmount MUST clear the timer.
+- Timer ticks call the latest callback through a ref; callback identity alone
+  MUST NOT reset cadence.
+- Request overlap prevention belongs with the page request lifecycle, not inside
+  a generic timer hook.
 
-## Custom Hook Patterns
+## Avoid
 
-<!-- How to create and structure custom hooks -->
+- An effect with `setInterval` and no cleanup.
+- Adding `onTick` to the interval effect and restarting cadence on every page
+  callback change.
+- Treating `Number(null) === 0` as the user's persisted disabled choice.
+- Writing arbitrary localStorage numbers into a literal-union state.
+- A hook that mixes timer lifecycle, API fetching, toast policy, and component
+  presentation.
 
-(To be filled by the team)
+## Verify
 
----
-
-## Data Fetching
-
-<!-- How data fetching is handled (React Query, SWR, etc.) -->
-
-(To be filled by the team)
-
----
-
-## Naming Conventions
-
-<!-- Hook naming rules (use*, etc.) -->
-
-(To be filled by the team)
-
----
-
-## Common Mistakes
-
-<!-- Hook-related mistakes your team has made -->
-
-(To be filled by the team)
+- Review effect dependencies and cleanup manually.
+- Verify disabled, default, each allowed interval, invalid persisted value, and
+  unmount behavior when the hook changes.
+- Run `npm run build`.
