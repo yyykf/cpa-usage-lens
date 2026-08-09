@@ -73,23 +73,23 @@ order.
 
 ## Acceptance Criteria
 
-- [ ] After pop, sanitized raw queue envelopes are saved before `toEvent` or
+- [x] After pop, sanitized raw queue envelopes are saved before `toEvent` or
       accounting validation runs.
-- [ ] Buffer files contain no plaintext API key, response headers, or failure
+- [x] Buffer files contain no plaintext API key, response headers, or failure
       body, while retaining accounting v2 and legacy token fields.
-- [ ] Startup recovery reconstructs the same `UsageEvent` and accounting result
+- [x] Startup recovery reconstructs the same `UsageEvent` and accounting result
       as the normal polling path.
-- [ ] A DB failure keeps the envelope pending; retry inserts once without
+- [x] A DB failure keeps the envelope pending; retry inserts once without
       duplicate rows.
-- [ ] A crash-equivalent replay after DB success is harmless through DB
+- [x] A crash-equivalent replay after DB success is harmless through DB
       idempotency.
-- [ ] Corrupt and unsupported envelope files are quarantined and observable.
-- [ ] Legacy `[]UsageEvent` pending files still recover safely.
-- [ ] Unit tests cover save/load/commit, redaction, v2 round-trip, legacy read,
+- [x] Corrupt and unsupported envelope files are quarantined and observable.
+- [x] Legacy `[]UsageEvent` pending files still recover safely.
+- [x] Unit tests cover save/load/commit, redaction, v2 round-trip, legacy read,
       unsupported/corrupt input, DB failure, replay, and invalid item handling.
-- [ ] `go test ./...`, `go test -race ./...`, `go vet ./...`, formatting checks,
+- [x] `go test ./...`, `go test -race ./...`, `go vet ./...`, formatting checks,
       frontend production build, and `git diff --check` pass.
-- [ ] vmrack candidate validation proves one collector, stable health/restarts,
+- [x] vmrack candidate validation proves one collector, stable health/restarts,
       advancing collector waterline, no pending buffer accumulation, and no
       secret-bearing buffer files.
 - [ ] PR merged, patch release published, official images deployed, and release
