@@ -1,19 +1,19 @@
 {
   "id": "00-bootstrap-guidelines",
   "name": "00-bootstrap-guidelines",
-  "title": "Bootstrap Guidelines",
-  "description": "Fill in project development guidelines for AI agents",
+  "title": "Bootstrap Project Specs",
+  "description": "Turn Trellis specs into executable project and architecture guardrails",
   "status": "in_progress",
   "dev_type": "docs",
-  "scope": null,
+  "scope": "fullstack",
   "package": null,
   "priority": "P1",
   "creator": "code4j",
   "assignee": "code4j",
   "createdAt": "2026-05-29",
   "completedAt": null,
-  "branch": null,
-  "base_branch": null,
+  "branch": "codex/bootstrap-project-specs",
+  "base_branch": "main",
   "worktree_path": null,
   "commit": null,
   "pr_url": null,
@@ -22,7 +22,8 @@
   "parent": null,
   "relatedFiles": [
     ".trellis/spec/backend/",
-    ".trellis/spec/frontend/"
+    ".trellis/spec/frontend/",
+    ".trellis/spec/guides/"
   ],
   "notes": "First-time setup task created by trellis init (fullstack project)",
   "meta": {}
