@@ -20,7 +20,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 | [Deployment Guidelines](./deployment-guidelines.md) | Production Compose, debug override, released-image deployment | ✅ Filled |
-| [Usage-Queue Contract](./usage-queue-contract.md) | pop-on-read rule, collector data-loss prevention | ✅ Filled |
+| [Usage-Queue Contract](./usage-queue-contract.md) | destructive pop, sanitized raw replay, at-least-once recovery | ✅ Filled |
 | [Cost Calculation](./cost-calculation.md) | Provider cache billing semantics, pricing rules | ✅ Filled |
 
 ---

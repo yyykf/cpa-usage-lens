@@ -21,8 +21,8 @@ func NewCPAClient(baseURL, key string, client *http.Client) *CPAClient {
 	return &CPAClient{baseURL: strings.TrimRight(baseURL, "/"), key: key, http: client}
 }
 
-// PopUsage 从队列取最多 count 条（pop 即删，不可回放）；空队列返回长度 0 的切片。
-func (c *CPAClient) PopUsage(ctx context.Context, count int) ([]rawQueueItem, error) {
+// PopUsageRaw 只切分队列响应为逐项原始 JSON；字段级解析必须在 durable buffer 之后进行。
+func (c *CPAClient) PopUsageRaw(ctx context.Context, count int) ([]json.RawMessage, error) {
 	url := fmt.Sprintf("%s/v0/management/usage-queue?count=%d", c.baseURL, count)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -40,7 +40,7 @@ func (c *CPAClient) PopUsage(ctx context.Context, count int) ([]rawQueueItem, er
 		return nil, fmt.Errorf("usage-queue HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var items []rawQueueItem
+	var items []json.RawMessage
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		return nil, fmt.Errorf("解析 usage-queue 响应失败: %w", err)
 	}

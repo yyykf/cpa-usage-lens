@@ -1,11 +1,14 @@
 package collector
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/code4j/cpa-usage-lens/backend/internal/model"
@@ -15,8 +18,15 @@ import (
 // 确认写库成功后再删除；启动时可恢复残留批次。
 // 这是 Supabase 云版独有的防丢保护——pop 不可回放，一次网络抖动就可能丢掉已取出的数据。
 type Buffer struct {
-	dir string
-	seq uint64
+	dir           string
+	seq           uint64
+	syncDirectory func() error
+}
+
+type pendingBatch struct {
+	Legacy bool
+	Events []model.UsageEvent
+	Replay replayBatch
 }
 
 // NewBuffer 创建缓冲目录。
@@ -24,20 +34,22 @@ func NewBuffer(dir string) (*Buffer, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	return &Buffer{dir: dir}, nil
+	return &Buffer{dir: dir, syncDirectory: func() error { return syncBufferDirectory(dir) }}, nil
 }
 
-// Save 把一批 events 原子落盘，返回批次句柄（文件名）；空批次返回空句柄。
-// 原子写：先写 .tmp + fsync，再 rename（同目录 rename 原子）——避免崩溃留下半截文件、
-// 让 recoverPending 读到坏 JSON。
-func (b *Buffer) Save(events []model.UsageEvent) (string, error) {
-	if len(events) == 0 {
+// SaveReplayBatch 把已脱敏、尚未规范化的 CPA 批次原子落盘。
+func (b *Buffer) SaveReplayBatch(batch replayBatch) (string, error) {
+	if len(batch.Items) == 0 {
 		return "", nil
 	}
-	data, err := json.Marshal(events)
+	data, err := json.Marshal(batch)
 	if err != nil {
 		return "", err
 	}
+	return b.saveJSON(data)
+}
+
+func (b *Buffer) saveJSON(data []byte) (string, error) {
 	name := fmt.Sprintf("batch_%d_%d.json", time.Now().UnixNano(), atomic.AddUint64(&b.seq, 1))
 	final := filepath.Join(b.dir, name)
 	tmp := final + ".tmp"
@@ -64,7 +76,22 @@ func (b *Buffer) Save(events []model.UsageEvent) (string, error) {
 		_ = os.Remove(tmp)
 		return "", err
 	}
+	if err := b.syncDirectory(); err != nil {
+		return name, err
+	}
 	return name, nil
+}
+
+func syncBufferDirectory(dir string) error {
+	f, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := f.Sync(); err != nil && !errors.Is(err, syscall.EINVAL) && !errors.Is(err, syscall.ENOTSUP) {
+		return err
+	}
+	return nil
 }
 
 // Commit 删除已确认写库的批次文件。
@@ -79,6 +106,15 @@ func (b *Buffer) Commit(handle string) error {
 func (b *Buffer) Quarantine(handle string) error {
 	src := filepath.Join(b.dir, handle)
 	return os.Rename(src, src+".corrupt")
+}
+
+// Reject 保留可解析但无法规范化的已脱敏批次，避免无效队列项静默消失。
+func (b *Buffer) Reject(handle string) error {
+	if handle == "" {
+		return nil
+	}
+	src := filepath.Join(b.dir, handle)
+	return os.Rename(src, src+".rejected")
 }
 
 // Pending 列出未提交的批次句柄（启动恢复用）。
@@ -96,15 +132,29 @@ func (b *Buffer) Pending() ([]string, error) {
 	return out, nil
 }
 
-// Load 读取一个批次文件的 events。
-func (b *Buffer) Load(handle string) ([]model.UsageEvent, error) {
+// LoadPending 兼容读取旧版 []UsageEvent 与新版 replayBatch；新写入只使用 replayBatch。
+func (b *Buffer) LoadPending(handle string) (pendingBatch, error) {
 	data, err := os.ReadFile(filepath.Join(b.dir, handle))
 	if err != nil {
-		return nil, err
+		return pendingBatch{}, err
 	}
-	var events []model.UsageEvent
-	if err := json.Unmarshal(data, &events); err != nil {
-		return nil, err
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return pendingBatch{}, fmt.Errorf("empty buffer file")
 	}
-	return events, nil
+	if trimmed[0] == '[' {
+		var events []model.UsageEvent
+		if err := json.Unmarshal(trimmed, &events); err != nil {
+			return pendingBatch{}, err
+		}
+		return pendingBatch{Legacy: true, Events: events}, nil
+	}
+	var batch replayBatch
+	if err := json.Unmarshal(trimmed, &batch); err != nil {
+		return pendingBatch{}, err
+	}
+	if batch.SchemaVersion != replayBufferSchemaVersion {
+		return pendingBatch{}, fmt.Errorf("unsupported replay buffer schema %d", batch.SchemaVersion)
+	}
+	return pendingBatch{Replay: batch}, nil
 }

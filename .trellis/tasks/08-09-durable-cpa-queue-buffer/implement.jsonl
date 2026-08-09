@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/usage-queue-contract.md", "reason": "Destructive-pop durability and replay contract"}
+{"file": ".trellis/tasks/08-09-durable-cpa-queue-buffer/research/collector-durability.md", "reason": "Current failure window and bounded design"}

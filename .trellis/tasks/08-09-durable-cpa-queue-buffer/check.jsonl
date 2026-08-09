@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/usage-queue-contract.md", "reason": "Verify durable order, redaction, and recovery semantics"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend quality gate entry point"}
