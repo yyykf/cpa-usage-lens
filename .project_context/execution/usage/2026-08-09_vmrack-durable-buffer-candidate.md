@@ -65,3 +65,29 @@
 - Start backend with `CUL_VERSION=v0.6.0`; no schema or data rollback is needed.
 - Candidate and official images remain available locally on vmrack until formal
   release validation finishes.
+
+## Official release and deployment
+
+- PR [#21](https://github.com/yyykf/cpa-usage-lens/pull/21) merged as
+  `d828d9fb9da1193bb5a3866729ccf4822631280c` after all CI checks passed.
+- Annotated tag `v0.6.1` resolves exactly to that application merge commit.
+- Release workflow
+  [31319207569](https://github.com/yyykf/cpa-usage-lens/actions/runs/31319207569)
+  completed successfully and published multi-architecture backend/frontend
+  images plus the [v0.6.1 release](https://github.com/yyykf/cpa-usage-lens/releases/tag/v0.6.1).
+- vmrack switched both services to official `v0.6.1` at
+  `2026-08-09T14:46:06Z`; collector remained enabled and unique.
+- Official backend `/app/server` SHA-256 remained identical to the accepted
+  candidate:
+  `c54a5a5562c8585be42028bf12d87d6faf3688e88ada56ca35e450e0eb2f882a`.
+- Eleven official-image snapshots through `14:52:20Z` showed restart count `0`,
+  empty collector error, and `0` pending/rejected/corrupt buffer files.
+- `events_ingested` advanced from `46818` to `46888` during the periodic window
+  and reached `46893` at final readback.
+- Final overview contained `1781` requests, all accounting quality `complete`,
+  with `0` unclassified, `0` inconsistent, and `0` legacy requests.
+- Final backend log scan found `0` data-loss, rejected-normalization, buffer,
+  write, panic, or fatal error lines; all public APIs remained healthy.
+- Release jobs emitted non-blocking GitHub runner warnings that several pinned
+  actions still target Node.js 20 and were forced onto Node.js 24. The release
+  succeeded; action-version maintenance is outside this collector fix.

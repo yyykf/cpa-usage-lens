@@ -92,7 +92,7 @@ order.
 - [x] vmrack candidate validation proves one collector, stable health/restarts,
       advancing collector waterline, no pending buffer accumulation, and no
       secret-bearing buffer files.
-- [ ] PR merged, patch release published, official images deployed, and release
+- [x] PR merged, patch release published, official images deployed, and release
       runtime revalidated.
 
 ## Non-Goals
