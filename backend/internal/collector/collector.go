@@ -48,24 +48,37 @@ func (c *Collector) recoverPending(ctx context.Context) {
 	handles, err := c.buffer.Pending()
 	if err != nil {
 		log.Printf("采集器：读取缓冲失败: %v", err)
+		c.recordRecoveryError(ctx, fmt.Sprintf("读取缓冲失败: %v", err))
 		return
 	}
 	for _, h := range handles {
-		events, err := c.buffer.Load(h)
+		batch, err := c.buffer.LoadPending(h)
 		if err != nil {
 			log.Printf("采集器：缓冲 %s 损坏，隔离为 .corrupt 待人工排查: %v", h, err)
+			message := fmt.Sprintf("缓冲 %s 无法恢复: %v", h, err)
 			if qerr := c.buffer.Quarantine(h); qerr != nil {
 				log.Printf("采集器：隔离损坏缓冲 %s 失败: %v", h, qerr)
+				message += fmt.Sprintf("；隔离失败: %v", qerr)
 			}
+			c.recordRecoveryError(ctx, message)
 			continue
 		}
-		if _, err := c.store.InsertEvents(ctx, events); err != nil {
+		result, err := c.processPending(ctx, h, batch)
+		if err != nil {
 			log.Printf("采集器：恢复缓冲 %s 写库失败（保留待重试）: %v", h, err)
+			c.recordRecoveryError(ctx, fmt.Sprintf("恢复缓冲 %s 失败: %v", h, err))
 			continue
 		}
-		_ = c.buffer.Commit(h)
-		log.Printf("采集器：已恢复缓冲批次 %s（%d 条）", h, len(events))
+		if result.rejected > 0 {
+			c.recordRecoveryError(ctx, fmt.Sprintf("恢复缓冲 %s 时有 %d 条记录无法规范化，已保留 .rejected", h, result.rejected))
+		}
+		log.Printf("采集器：已恢复缓冲批次 %s（入库 %d 条，拒绝 %d 条）", h, result.inserted, result.rejected)
 	}
+}
+
+func (c *Collector) recordRecoveryError(ctx context.Context, message string) {
+	now := time.Now()
+	_ = c.store.BumpCollectorState(ctx, model.CollectorState{LastError: message, LastErrorAt: &now})
 }
 
 // pollOnce 执行一次轮询：pop → 剥敏感 → 落盘缓冲 → 写库 → 确认 → 更新状态。
@@ -73,7 +86,7 @@ func (c *Collector) pollOnce(ctx context.Context) {
 	now := time.Now()
 	st := model.CollectorState{LastPollAt: &now}
 
-	items, err := c.client.PopUsage(ctx, c.batchSize)
+	items, err := c.client.PopUsageRaw(ctx, c.batchSize)
 	if err != nil {
 		st.LastError = err.Error()
 		st.LastErrorAt = &now
@@ -85,54 +98,86 @@ func (c *Collector) pollOnce(ctx context.Context) {
 		return
 	}
 
-	events := make([]model.UsageEvent, 0, len(items))
-	var lastTS time.Time
-	var lastID string
-	for i := range items {
-		ev, ok := toEvent(items[i])
-		// toEvent 已就地把明文 api_key 算成指纹+掩码，明文不再有用：
-		// 立即清掉队列项里的明文引用，缩短其内存生命周期（即便后续 skip 也清）。
-		items[i].APIKey = ""
-		if !ok {
-			continue
-		}
-		events = append(events, ev)
-		if ev.EventTS.After(lastTS) {
-			lastTS = ev.EventTS
-			lastID = ev.RequestID // 与 lastTS 保持同一条，诊断信息才一致
-		}
-	}
-	if len(events) == 0 {
-		_ = c.store.BumpCollectorState(ctx, st)
-		return
-	}
-
-	// 先落盘缓冲（防 pop 了但写库失败丢数据），写库确认后再删
-	handle, saveErr := c.buffer.Save(events)
+	// pop 后只做不可避免的密钥脱敏；原始协议字段先落盘，再做解析和 accounting 校验。
+	batch := newReplayBatchFromRaw(items, now)
+	handle, saveErr := c.buffer.SaveReplayBatch(batch)
 	if saveErr != nil {
 		log.Printf("采集器：落盘缓冲失败（仍尝试写库，但已失去崩溃保护）: %v", saveErr)
 	}
 
-	inserted, err := c.store.InsertEvents(ctx, events)
+	result, err := c.processPending(ctx, handle, pendingBatch{Replay: batch})
 	if err != nil {
 		if saveErr != nil {
 			// 缓冲没存上 + 写库失败：这批已 pop 的数据有丢失风险（pop 不可回放），强告警
-			st.LastError = fmt.Sprintf("数据丢失风险：缓冲与写库均失败（%d 条）：buffer=%v；insert=%v", len(events), saveErr, err)
+			st.LastError = fmt.Sprintf("数据丢失风险：缓冲与处理均失败（%d 条）：buffer=%v；process=%v", len(items), saveErr, err)
 		} else {
 			st.LastError = err.Error()
 		}
 		st.LastErrorAt = &now
 		_ = c.store.BumpCollectorState(ctx, st)
-		return // Save 成功则缓冲保留、下次 recover 重试
+		return
 	}
-	if handle != "" {
-		_ = c.buffer.Commit(handle)
+	if saveErr != nil {
+		st.LastError = fmt.Sprintf("数据丢失风险：落盘缓冲失败（%d 条）：%v", len(items), saveErr)
+		st.LastErrorAt = &now
+	} else if result.rejected > 0 {
+		st.LastError = fmt.Sprintf("%d 条队列记录无法规范化，已保留 .rejected 待排查", result.rejected)
+		st.LastErrorAt = &now
 	}
 
-	st.EventsIngested = inserted
-	if !lastTS.IsZero() {
-		st.LastEventTS = &lastTS
+	st.EventsIngested = result.inserted
+	if !result.lastTS.IsZero() {
+		st.LastEventTS = &result.lastTS
 	}
-	st.LastRequestID = lastID
+	st.LastRequestID = result.lastID
 	_ = c.store.BumpCollectorState(ctx, st)
+}
+
+type pendingResult struct {
+	inserted int64
+	rejected int
+	lastTS   time.Time
+	lastID   string
+}
+
+func (c *Collector) processPending(ctx context.Context, handle string, batch pendingBatch) (pendingResult, error) {
+	result := pendingResult{}
+	events := batch.Events
+	if !batch.Legacy {
+		events = make([]model.UsageEvent, 0, len(batch.Replay.Items))
+		for _, item := range batch.Replay.Items {
+			ev, ok := toEventFromReplay(item)
+			if !ok {
+				result.rejected++
+				continue
+			}
+			events = append(events, ev)
+		}
+	}
+	for _, ev := range events {
+		if ev.EventTS.After(result.lastTS) {
+			result.lastTS = ev.EventTS
+			result.lastID = ev.RequestID
+		}
+	}
+	if len(events) > 0 {
+		inserted, err := c.store.InsertEvents(ctx, events)
+		if err != nil {
+			return pendingResult{}, err
+		}
+		result.inserted = inserted
+	}
+	if handle == "" {
+		return result, nil
+	}
+	if result.rejected > 0 {
+		if err := c.buffer.Reject(handle); err != nil {
+			return pendingResult{}, fmt.Errorf("保留拒绝批次 %s: %w", handle, err)
+		}
+		return result, nil
+	}
+	if err := c.buffer.Commit(handle); err != nil {
+		return pendingResult{}, fmt.Errorf("提交缓冲 %s: %w", handle, err)
+	}
+	return result, nil
 }

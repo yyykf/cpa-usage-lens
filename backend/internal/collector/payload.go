@@ -3,8 +3,8 @@ package collector
 import "encoding/json"
 
 // rawQueueItem 是 CPA GET /v0/management/usage-queue 返回的单条原始 payload。
-// 含敏感/大字段（api_key、response_headers、fail.body），仅用于解析；
-// 由 toEvent 转成精简明细时丢弃这些字段，绝不入库。
+// 含敏感/大字段（api_key、response_headers、fail.body），仅在 durable buffer 已保存
+// 脱敏 RawMessage 后解析；敏感字段在 replay envelope 构造时已删除，绝不落盘或入库。
 type rawQueueItem struct {
 	Timestamp         string             `json:"timestamp"`
 	LatencyMs         *int32             `json:"latency_ms"`

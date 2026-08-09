@@ -3,6 +3,7 @@ package collector
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -68,10 +69,25 @@ func keyMaskPrefix(apiKey string) string {
 	return noSepMaskPrefix
 }
 
-// toEvent 把 CPA 原始队列条目转成入库用的精简明细，
-// 剥离 api_key / response_headers / fail.body 等敏感或大字段（目标结构上根本不含这些字段）。
-// request_id 缺失或 timestamp 解析失败时返回 ok=false，调用方应跳过该条。
+// toEvent 把已解码 CPA 队列条目转成入库明细，供解析单测与兼容逻辑复用。
+// collector 主链使用 toEventFromReplay，保证强类型解析发生在 durable save 之后。
+// request_id 缺失或 timestamp 解析失败时返回 ok=false，collector 会保留 .rejected 证据。
 func toEvent(raw rawQueueItem) (model.UsageEvent, bool) {
+	return toEventDecoded(raw, keyFingerprint(raw.APIKey), keyMask(raw.APIKey))
+}
+
+func toEventFromReplay(item replayQueueItem) (model.UsageEvent, bool) {
+	if item.SanitizationError != "" {
+		return model.UsageEvent{}, false
+	}
+	var raw rawQueueItem
+	if err := json.Unmarshal(item.Payload, &raw); err != nil {
+		return model.UsageEvent{}, false
+	}
+	return toEventDecoded(raw, item.KeyFingerprint, item.KeyMask)
+}
+
+func toEventDecoded(raw rawQueueItem, keyFingerprintValue, keyMaskValue string) (model.UsageEvent, bool) {
 	if raw.RequestID == "" {
 		return model.UsageEvent{}, false
 	}
@@ -81,17 +97,16 @@ func toEvent(raw rawQueueItem) (model.UsageEvent, bool) {
 	}
 
 	ev := model.UsageEvent{
-		RequestID: raw.RequestID,
-		EventTS:   ts,
-		Source:    raw.Source,
-		Provider:  raw.Provider,
-		Model:     raw.Model,
-		Alias:     raw.Alias,
-		Endpoint:  raw.Endpoint,
-		AuthType:  raw.AuthType,
-		// 明文 api_key 仅在此就地算指纹+掩码，算完即弃；明文绝不进 UsageEvent / 库 / 日志。
-		KeyFingerprint: keyFingerprint(raw.APIKey),
-		KeyMask:        keyMask(raw.APIKey),
+		RequestID:      raw.RequestID,
+		EventTS:        ts,
+		Source:         raw.Source,
+		Provider:       raw.Provider,
+		Model:          raw.Model,
+		Alias:          raw.Alias,
+		Endpoint:       raw.Endpoint,
+		AuthType:       raw.AuthType,
+		KeyFingerprint: keyFingerprintValue,
+		KeyMask:        keyMaskValue,
 		Tokens: model.Tokens{ // 显式逐字段赋值：未来任一 struct 改字段会编译报错，避免静默错位
 			Input:         raw.Tokens.Input,
 			Output:        raw.Tokens.Output,
